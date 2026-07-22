@@ -1,6 +1,6 @@
 {
-  "appId": "com.ambulance.preclear",
-  "appName": "AmbulancePreClear",
+  "appId": "com.PreRoute.app",
+  "appName": "PreRoute",
   "webDir": "dist",
   "bundledWebRuntime": false,
   "server": {

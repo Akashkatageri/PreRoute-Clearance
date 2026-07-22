@@ -1,4 +1,6 @@
 import { Emergency } from "../types";
+import { collection, onSnapshot, doc, setDoc, updateDoc, deleteDoc } from "firebase/firestore";
+import { db } from "../lib/firebase";
 
 type Listener = (emergencies: Emergency[]) => void;
 
@@ -9,8 +11,31 @@ class RealtimeSyncService {
   private pollingTimer: any = null;
 
   constructor() {
+    this.initFirestoreListener();
     this.initSSE();
     this.startPolling();
+  }
+
+  private initFirestoreListener() {
+    try {
+      if (typeof window === "undefined") return;
+      const emergenciesCol = collection(db, "emergencies");
+      onSnapshot(emergenciesCol, (snapshot) => {
+        const firestoreList: Emergency[] = [];
+        snapshot.forEach((docSnap) => {
+          firestoreList.push(docSnap.data() as Emergency);
+        });
+
+        if (firestoreList.length > 0) {
+          this.cache = firestoreList;
+          this.notify();
+        }
+      }, (error) => {
+        console.warn("Firestore onSnapshot error:", error);
+      });
+    } catch (e) {
+      console.warn("Could not setup Firestore realtime listener:", e);
+    }
   }
 
   private initSSE() {
@@ -22,8 +47,10 @@ class RealtimeSyncService {
         try {
           const payload = JSON.parse(event.data);
           if (payload.type === "INIT") {
-            this.cache = payload.data;
-            this.notify();
+            if (payload.data && payload.data.length > 0) {
+              this.cache = payload.data;
+              this.notify();
+            }
           } else {
             this.fetchLatest();
           }
@@ -33,7 +60,6 @@ class RealtimeSyncService {
       };
 
       this.eventSource.onerror = () => {
-        // SSE disconnected, fallback polling takes over seamlessly
         if (this.eventSource) {
           this.eventSource.close();
           this.eventSource = null;
@@ -57,8 +83,10 @@ class RealtimeSyncService {
       const res = await fetch("/api/emergencies");
       if (res.ok) {
         const data = await res.json();
-        this.cache = data;
-        this.notify();
+        if (data && data.length > 0) {
+          this.cache = data;
+          this.notify();
+        }
         return data;
       }
     } catch (e) {
@@ -88,33 +116,61 @@ class RealtimeSyncService {
       body: JSON.stringify(emergencyData)
     });
     const created = await res.json();
+
+    // Also persist to Firestore for instant real-time multi-device synchronization
+    try {
+      await setDoc(doc(db, "emergencies", created.id), created);
+    } catch (e) {
+      console.warn("Firestore create emergency error:", e);
+    }
+
     await this.fetchLatest();
     return created;
   }
 
   public async updateLocation(id: string, currentLat: number, currentLng: number, etaMinutes?: number, distanceKm?: number): Promise<void> {
-    await fetch(`/api/emergencies/${id}/location`, {
+    const payload: any = { currentLat, currentLng, lastUpdated: new Date().toISOString() };
+    if (etaMinutes !== undefined) payload.etaMinutes = etaMinutes;
+    if (distanceKm !== undefined) payload.distanceKm = distanceKm;
+
+    fetch(`/api/emergencies/${id}/location`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ currentLat, currentLng, etaMinutes, distanceKm })
-    });
-    await this.fetchLatest();
+      body: JSON.stringify(payload)
+    }).catch((e) => console.warn("API updateLocation error:", e));
+
+    try {
+      await updateDoc(doc(db, "emergencies", id), payload);
+    } catch (e) {
+      console.warn("Firestore updateLocation error:", e);
+    }
   }
 
   public async updateStatus(id: string, status: Emergency['status']): Promise<void> {
-    await fetch(`/api/emergencies/${id}/status`, {
+    const payload = { status, lastUpdated: new Date().toISOString() };
+    fetch(`/api/emergencies/${id}/status`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ status })
-    });
-    await this.fetchLatest();
+    }).catch((e) => console.warn("API updateStatus error:", e));
+
+    try {
+      await updateDoc(doc(db, "emergencies", id), payload);
+    } catch (e) {
+      console.warn("Firestore updateStatus error:", e);
+    }
   }
 
   public async deleteEmergency(id: string): Promise<void> {
-    await fetch(`/api/emergencies/${id}`, {
+    fetch(`/api/emergencies/${id}`, {
       method: "DELETE"
-    });
-    await this.fetchLatest();
+    }).catch((e) => console.warn("API deleteEmergency error:", e));
+
+    try {
+      await deleteDoc(doc(db, "emergencies", id));
+    } catch (e) {
+      console.warn("Firestore deleteEmergency error:", e);
+    }
   }
 }
 

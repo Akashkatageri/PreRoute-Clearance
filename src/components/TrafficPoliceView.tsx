@@ -78,6 +78,13 @@ export const TrafficPoliceView: React.FC<TrafficPoliceViewProps> = ({
     }
   };
 
+  const handleDismissEmergency = async () => {
+    if (selectedEmergency) {
+      await realtimeService.deleteEmergency(selectedEmergency.id);
+      setSelectedId(null);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col">
       {/* Top Header */}
@@ -112,10 +119,10 @@ export const TrafficPoliceView: React.FC<TrafficPoliceViewProps> = ({
             }}
             className="flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white font-bold text-xs px-3 py-2 rounded-xl border border-slate-700 transition-colors cursor-pointer"
             id="btn-police-logout"
-            title="Logout / Switch Portal"
+            title="Sign Out"
           >
             <LogOut className="w-4 h-4 text-slate-400" />
-            <span className="hidden sm:inline">Switch Portal</span>
+            <span className="hidden sm:inline">Sign Out</span>
           </button>
         </div>
       </header>
@@ -128,6 +135,22 @@ export const TrafficPoliceView: React.FC<TrafficPoliceViewProps> = ({
             <h2 className="text-xs font-bold text-slate-400 uppercase tracking-wider">
               ACTIVE EMERGENCIES ({activeList.length})
             </h2>
+            {activeList.length > 0 && (
+              <button
+                onClick={async () => {
+                  if (confirm("Clear all active emergencies from radar?")) {
+                    for (const emg of activeList) {
+                      await realtimeService.deleteEmergency(emg.id);
+                    }
+                    setSelectedId(null);
+                  }
+                }}
+                className="text-[10px] font-extrabold text-slate-500 hover:text-red-600 bg-slate-200/80 hover:bg-red-50 px-2 py-1 rounded-md transition-colors cursor-pointer"
+                title="Clear all active emergencies from radar"
+              >
+                Clear All Radar
+              </button>
+            )}
           </div>
 
           {activeList.length === 0 ? (
@@ -222,7 +245,7 @@ export const TrafficPoliceView: React.FC<TrafficPoliceViewProps> = ({
                 </div>
 
                 {/* Actions Row */}
-                <div className="flex items-center gap-2 shrink-0 self-end md:self-center">
+                <div className="flex items-center gap-2 shrink-0 self-end md:self-center flex-wrap">
                   <button
                     onClick={handleAcknowledge}
                     className="bg-amber-400 hover:bg-amber-500 text-slate-950 font-extrabold text-sm px-4 py-2.5 rounded-xl shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer"
@@ -236,6 +259,14 @@ export const TrafficPoliceView: React.FC<TrafficPoliceViewProps> = ({
                     id="btn-police-mark-cleared"
                   >
                     ✓ Mark Cleared
+                  </button>
+                  <button
+                    onClick={handleDismissEmergency}
+                    className="bg-red-700 hover:bg-red-800 text-white font-extrabold text-sm px-3.5 py-2.5 rounded-xl shadow-xs transition-colors border border-red-500 flex items-center gap-1.5 cursor-pointer"
+                    id="btn-police-dismiss"
+                    title="Remove this emergency from radar"
+                  >
+                    ✕ Dismiss
                   </button>
                 </div>
               </div>
@@ -344,6 +375,9 @@ export const TrafficPoliceView: React.FC<TrafficPoliceViewProps> = ({
                     destinationName={selectedEmergency.destinationName}
                     vehicleId={selectedEmergency.vehicleId}
                     isEmergencyActive={selectedEmergency.status !== "completed"}
+                    allEmergencies={emergencies}
+                    selectedEmergencyId={selectedEmergency.id}
+                    onSelectEmergency={setSelectedId}
                     height="380px"
                   />
                 </div>

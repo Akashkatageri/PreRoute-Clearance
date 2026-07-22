@@ -28,33 +28,7 @@ app.use(express.json());
 const PORT = 3000;
 
 // In-memory real-time store for active emergencies
-const emergencies: Record<string, Emergency> = {
-  "EMG-701": {
-    id: "EMG-701",
-    vehicleId: "AMB-7",
-    destinationName: "Zymus Hospitals",
-    destinationAddress: "Zymus Hospitals, Kanakapura Road, Talagattapura, Bengaluru - 560109, KA, India",
-    destinationLat: 12.8715,
-    destinationLng: 77.5385,
-    startLat: 12.8620,
-    startLng: 77.5280,
-    currentLat: 12.8620,
-    currentLng: 77.5280,
-    priority: "critical",
-    status: "active",
-    etaMinutes: 3,
-    distanceKm: 3.1,
-    createdAt: "7:20:59 PM",
-    lastUpdated: new Date().toISOString(),
-    routeGeometry: [
-      [12.8620, 77.5280],
-      [12.8645, 77.5305],
-      [12.8670, 77.5330],
-      [12.8690, 77.5360],
-      [12.8715, 77.5385]
-    ]
-  }
-};
+const emergencies: Record<string, Emergency> = {};
 
 const sseClients: express.Response[] = [];
 

@@ -1,0 +1,37 @@
+{
+  "entities": {
+    "Emergency": {
+      "title": "Emergency",
+      "description": "Live emergency dispatches and tracking",
+      "type": "object",
+      "properties": {
+        "vehicleId": { "type": "string" },
+        "destinationName": { "type": "string" },
+        "currentLat": { "type": "number" },
+        "currentLng": { "type": "number" },
+        "status": { "type": "string" }
+      },
+      "required": ["vehicleId", "destinationName", "currentLat", "currentLng"]
+    },
+    "User": {
+      "title": "User",
+      "description": "Saved user profiles linked to Google Accounts",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string" },
+        "name": { "type": "string" },
+        "role": { "type": "string" },
+        "vehicleId": { "type": "string" },
+        "badgeNumber": { "type": "string" },
+        "avatarUrl": { "type": "string" }
+      },
+      "required": ["email", "name", "role"]
+    }
+  },
+  "firestore": {
+    "/users/{email}": {
+      "schema": "User",
+      "description": "Collection of saved user profiles"
+    }
+  }
+}

@@ -13,6 +13,18 @@ interface AmbulanceDriverViewProps {
   onLogout?: () => void;
 }
 
+function calculateHaversineKm(lat1: number, lon1: number, lat2: number, lon2: number) {
+  const R = 6371; // Earth radius in km
+  const dLat = (lat2 - lat1) * (Math.PI / 180);
+  const dLon = (lon2 - lon1) * (Math.PI / 180);
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
 export const AmbulanceDriverView: React.FC<AmbulanceDriverViewProps> = ({
   onSwitchRole,
   activeEmergencies,
@@ -42,6 +54,8 @@ export const AmbulanceDriverView: React.FC<AmbulanceDriverViewProps> = ({
   const [currentPos, setCurrentPos] = useState({ lat: 12.8620, lng: 77.5280 });
 
   // Notifications
+  const [toastMessage, setToastMessage] = useState("EMERGENCY ALERT SENT!");
+  const [toastSubtext, setToastSubtext] = useState("Traffic police have been notified with live road corridor.");
   const [showToast, setShowToast] = useState(false);
 
   // Active Emergency for this vehicle
@@ -72,6 +86,25 @@ export const AmbulanceDriverView: React.FC<AmbulanceDriverViewProps> = ({
     }
   }, [activeEmergency]);
 
+  // Auto-detect when destination location is reached (< 80m distance)
+  useEffect(() => {
+    if (activeEmergency && activeEmergency.destinationLat && activeEmergency.destinationLng) {
+      const distKm = calculateHaversineKm(
+        currentPos.lat,
+        currentPos.lng,
+        activeEmergency.destinationLat,
+        activeEmergency.destinationLng
+      );
+
+      if (distKm <= 0.08) { // Reached within 80 meters
+        handleCompleteTrip();
+        setToastMessage("HOSPITAL REACHED! 🎉");
+        setToastSubtext(`${activeEmergency.destinationName} reached. Emergency route completed.`);
+        setShowToast(true);
+      }
+    }
+  }, [currentPos.lat, currentPos.lng, activeEmergency?.id]);
+
   // Get current device physical location via Geolocation API
   const handleDetectGPS = () => {
     if (!("geolocation" in navigator)) {
@@ -89,7 +122,6 @@ export const AmbulanceDriverView: React.FC<AmbulanceDriverViewProps> = ({
         setGpsAccuracy(Math.round(pos.coords.accuracy || 10));
         setGpsSpeed(pos.coords.speed ? Math.round(pos.coords.speed * 3.6) : 0);
 
-        // Auto recalculate real road path from new GPS location
         if (selectedHospital) {
           handleCalculateRoute(selectedHospital, { lat, lng });
         }
@@ -195,6 +227,8 @@ export const AmbulanceDriverView: React.FC<AmbulanceDriverViewProps> = ({
       routeGeometry: currentRoute
     });
 
+    setToastMessage("EMERGENCY ROUTE STARTED! 🚨");
+    setToastSubtext("Route corridor is now broadcasting live to all Traffic Police.");
     setShowToast(true);
   };
 
@@ -210,28 +244,7 @@ export const AmbulanceDriverView: React.FC<AmbulanceDriverViewProps> = ({
     setSearchQuery("");
   };
 
-  // Manual step forward along route (for manual testing when device is stationary)
-  const handleStepManual = () => {
-    if (!routeGeometry || routeGeometry.length === 0) return;
-    simulationStepRef.current = (simulationStepRef.current + 1) % routeGeometry.length;
-    const point = routeGeometry[simulationStepRef.current];
-    if (point) {
-      const [lat, lng] = point;
-      setCurrentPos({ lat, lng });
-      const remainingSteps = routeGeometry.length - simulationStepRef.current;
-      const newEta = Math.max(1, Math.round(remainingSteps * 0.5));
-      const newDist = Math.max(0.1, Math.round((remainingSteps / routeGeometry.length) * (distanceKm || 3) * 10) / 10);
-      setEtaMinutes(newEta);
-      setDistanceKm(newDist);
-
-      if (activeEmergency) {
-        realtimeService.updateLocation(activeEmergency.id, lat, lng, newEta, newDist);
-      }
-    }
-  };
-
-  // Real-time Hardware GPS Watcher (tracks actual physical device movement)
-  const simulationStepRef = useRef(0);
+  // Real-time Hardware GPS Watcher
   useEffect(() => {
     if (!("geolocation" in navigator)) return;
 
@@ -291,8 +304,9 @@ export const AmbulanceDriverView: React.FC<AmbulanceDriverViewProps> = ({
             <input
               type="text"
               value={vehicleId}
+              disabled={!!activeEmergency}
               onChange={(e) => setVehicleId(e.target.value)}
-              className="bg-transparent text-xs font-mono font-bold text-red-400 outline-none w-28 uppercase"
+              className="bg-transparent text-xs font-mono font-bold text-red-400 outline-none w-28 uppercase disabled:opacity-50"
             />
           </div>
 
@@ -303,10 +317,10 @@ export const AmbulanceDriverView: React.FC<AmbulanceDriverViewProps> = ({
             }}
             className="flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white font-bold text-xs px-3 py-2 rounded-xl border border-slate-700 transition-colors cursor-pointer"
             id="btn-driver-logout"
-            title="Logout / Switch Portal"
+            title="Sign Out"
           >
             <LogOut className="w-4 h-4 text-slate-400" />
-            <span className="hidden sm:inline">Switch Portal</span>
+            <span className="hidden sm:inline">Sign Out</span>
           </button>
         </div>
       </header>
@@ -315,26 +329,31 @@ export const AmbulanceDriverView: React.FC<AmbulanceDriverViewProps> = ({
       <main className="w-full max-w-2xl px-4 mt-6 flex flex-col gap-6">
         {/* Active Emergency Banner */}
         {activeEmergency && (
-          <div className="bg-red-600 text-white p-4 sm:p-5 rounded-2xl shadow-lg border border-red-700 flex items-center justify-between animate-in fade-in duration-300">
-            <div className="flex items-center gap-3">
-              <div className="p-2.5 bg-white/20 rounded-xl animate-pulse shrink-0">
-                <Siren className="w-6 h-6 text-white" />
-              </div>
-              <div>
-                <h3 className="font-bold text-sm tracking-wide uppercase flex items-center gap-2">
-                  EMERGENCY ACTIVE • {activeEmergency.vehicleId}
-                </h3>
-                <p className="text-xs text-red-100 mt-0.5">
-                  Live road corridor broadcasting to Traffic Control Center
-                </p>
+          <div className="bg-red-600 text-white p-4 sm:p-5 rounded-2xl shadow-lg border border-red-700 flex flex-col gap-3 animate-in fade-in duration-300">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-white/20 rounded-xl animate-pulse shrink-0">
+                  <Siren className="w-6 h-6 text-white" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-sm tracking-wide uppercase flex items-center gap-2">
+                    EMERGENCY ROUTE ACTIVE • {activeEmergency.vehicleId}
+                  </h3>
+                  <p className="text-xs text-red-100 mt-0.5">
+                    Broadcasting live location & corridor to all Traffic Police
+                  </p>
+                </div>
               </div>
             </div>
-            <button
-              onClick={handleCompleteTrip}
-              className="bg-white text-red-600 font-bold text-xs px-4 py-2.5 rounded-xl shadow-xs hover:bg-red-50 transition-colors cursor-pointer shrink-0"
-            >
-              Complete Trip
-            </button>
+
+            <div className="flex items-center justify-end pt-2 border-t border-red-500/80 flex-wrap gap-2">
+              <button
+                onClick={handleCompleteTrip}
+                className="bg-white text-red-600 font-extrabold text-xs px-4 py-2 rounded-xl shadow-xs hover:bg-red-50 transition-colors cursor-pointer shrink-0"
+              >
+                Complete Trip
+              </button>
+            </div>
           </div>
         )}
 
@@ -576,8 +595,8 @@ export const AmbulanceDriverView: React.FC<AmbulanceDriverViewProps> = ({
       {/* Notification Toast */}
       {showToast && (
         <NotificationToast
-          message="EMERGENCY ALERT SENT!"
-          subtext="Traffic police have been notified with live road corridor."
+          message={toastMessage}
+          subtext={toastSubtext}
           onClose={() => setShowToast(false)}
         />
       )}

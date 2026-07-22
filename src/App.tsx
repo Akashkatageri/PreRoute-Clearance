@@ -4,6 +4,7 @@ import { realtimeService } from "./services/realtime";
 import { RoleSelector } from "./components/RoleSelector";
 import { AmbulanceDriverView } from "./components/AmbulanceDriverView";
 import { TrafficPoliceView } from "./components/TrafficPoliceView";
+import { auth, signOut } from "./lib/firebase";
 
 export default function App() {
   const [session, setSession] = useState<UserSession | null>(() => {
@@ -19,11 +20,13 @@ export default function App() {
   const [role, setRole] = useState<Role>(session ? session.role : "select");
   const [emergencies, setEmergencies] = useState<Emergency[]>([]);
 
-  // Keep session and role aligned
+  // Keep session and role aligned & sync to localStorage for persistent session
   useEffect(() => {
     if (session) {
+      localStorage.setItem("ambulance_preclear_session", JSON.stringify(session));
       setRole(session.role);
     } else {
+      localStorage.removeItem("ambulance_preclear_session");
       setRole("select");
     }
   }, [session]);
@@ -37,11 +40,13 @@ export default function App() {
   }, []);
 
   const handleLogin = (newSession: UserSession) => {
+    localStorage.setItem("ambulance_preclear_session", JSON.stringify(newSession));
     setSession(newSession);
     setRole(newSession.role);
   };
 
   const handleLogout = () => {
+    signOut(auth).catch((err) => console.warn("Firebase signout error:", err));
     localStorage.removeItem("ambulance_preclear_session");
     setSession(null);
     setRole("select");

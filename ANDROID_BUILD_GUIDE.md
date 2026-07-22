@@ -1,6 +1,55 @@
-# Capacitor Android & Google Sign-In Setup Guide
+# Capacitor Android & Google Sign-In Setup Guide (`com.PreRoute.app`)
 
-This project is fully configured for **Capacitor Mobile Native App** execution with real-time GPS tracking, push notifications, and Google Native Authentication.
+This project is fully configured for **PreRoute Mobile Native Android App** execution (`com.PreRoute.app`) linked with Firebase project `preroute-01`, with real-time GPS tracking, push notifications, and Google Native Authentication.
+
+---
+
+## App Configuration Details
+- **Android Package Name:** `com.PreRoute.app`
+- **Firebase Project ID:** `preroute-01`
+- **Project Number:** `540691753241`
+- **App ID (Android):** `1:540691753241:android:0c20089fdbc8bceda8bd88`
+- **Google OAuth Web Client ID:** `540691753241-pcq4g6kdee8r4nmpb34d1bbq7ha0lg1r.apps.googleusercontent.com`
+
+---
+
+## Google Services Gradle Plugin & Firebase SDK Setup
+
+To enable `google-services.json` in Android Studio or Gradle builds, ensure the following Gradle files are configured:
+
+### Root-level (`android/build.gradle`):
+```groovy
+buildscript {
+    repositories {
+        google()
+        mavenCentral()
+    }
+    dependencies {
+        classpath 'com.android.tools.build:gradle:8.2.1'
+        // Add Google Services Gradle Plugin
+        classpath 'com.google.gms:google-services:4.5.0'
+    }
+}
+```
+
+### Module-level (`android/app/build.gradle`):
+```groovy
+apply plugin: 'com.android.application'
+// Apply Google Services Gradle Plugin
+apply plugin: 'com.google.gms.google-services'
+
+dependencies {
+    implementation fileTree(dir: 'libs', include: ['*.jar'])
+    
+    // Firebase BoM & Services
+    implementation platform('com.google.firebase:firebase-bom:34.16.0')
+    implementation 'com.google.firebase:firebase-analytics'
+    implementation 'com.google.firebase:firebase-auth'
+    implementation 'com.google.firebase:firebase-firestore'
+}
+```
+
+*Note: The included automated script `node scripts/patch-android-gradle.js` automatically applies these configurations during CI/CD builds.*
 
 ---
 

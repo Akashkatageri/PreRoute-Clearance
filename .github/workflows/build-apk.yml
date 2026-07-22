@@ -33,6 +33,14 @@ jobs:
           distribution: 'zulu'
           java-version: '17'
 
+      - name: Initialize & Sync Capacitor Android
+        run: |
+          if [ ! -f "android/gradlew" ]; then
+            rm -rf android
+            npx cap add android
+          fi
+          npx cap sync android
+
       - name: Copy Google Services Configuration
         run: |
           mkdir -p android/app
@@ -46,10 +54,8 @@ jobs:
           mkdir -p android/app
           echo "$KEYSTORE_BASE64" | base64 --decode > android/app/debug.keystore
 
-      - name: Sync Capacitor Android & Apply Google Services
+      - name: Patch Android Gradle Config
         run: |
-          npx cap add android || true
-          npx cap sync android
           node scripts/patch-android-gradle.js
 
       - name: Build Debug APK

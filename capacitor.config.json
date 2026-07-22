@@ -1,0 +1,17 @@
+{
+  "appId": "com.ambulance.preclear",
+  "appName": "AmbulancePreClear",
+  "webDir": "dist",
+  "bundledWebRuntime": false,
+  "server": {
+    "androidScheme": "https"
+  },
+  "plugins": {
+    "PushNotifications": {
+      "presentationOptions": ["badge", "sound", "alert"]
+    },
+    "Geolocation": {
+      "enableHighAccuracy": true
+    }
+  }
+}

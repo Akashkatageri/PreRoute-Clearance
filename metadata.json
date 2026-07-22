@@ -1,0 +1,6 @@
+{
+  "name": "AmbulancePreClear",
+  "description": "Advanced Emergency Response Route Coordination System with live location broadcasting, priority routing, and traffic police pre-clearing controls.",
+  "requestFramePermissions": ["geolocation"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

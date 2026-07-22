@@ -12,6 +12,10 @@
     },
     "Geolocation": {
       "enableHighAccuracy": true
+    },
+    "FirebaseAuthentication": {
+      "skipNativeAuth": false,
+      "providers": ["google.com"]
     }
   }
 }

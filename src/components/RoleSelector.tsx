@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { ShieldAlert, Ambulance, Shield, CheckCircle2, AlertCircle, Radio, Sparkles, Lock, LogOut, UserCheck } from "lucide-react";
 import { Role, UserSession } from "../types";
 import { NotificationService } from "../services/notification";
-import { auth, db, googleProvider, signInWithPopup, signOut } from "../lib/firebase";
+import { auth, db, googleProvider, signInWithGoogleNativeOrWeb, signOut } from "../lib/firebase";
 import { onAuthStateChanged } from "firebase/auth";
 import { doc, getDoc, setDoc } from "firebase/firestore";
 
@@ -110,17 +110,13 @@ export const RoleSelector: React.FC<RoleSelectorProps> = ({ onLogin }) => {
     setAuthError(null);
 
     try {
-      googleProvider.setCustomParameters({
-        prompt: 'select_account'
-      });
-
-      const result = await signInWithPopup(auth, googleProvider);
-      await applyGoogleUserAndProfile(result.user);
+      const user = await signInWithGoogleNativeOrWeb();
+      await applyGoogleUserAndProfile(user);
       NotificationService.requestPermission();
     } catch (err: any) {
-      console.warn("Firebase Google Sign-In Popup failed or was closed:", err);
+      console.warn("Firebase Google Sign-In failed or was closed:", err);
       if (err.code === "auth/popup-blocked" || err.code === "auth/cancelled-popup-request" || err.code === "auth/popup-closed-by-user") {
-        setAuthError("Sign-in popup closed or blocked. Please retry Google Sign-In.");
+        setAuthError("Sign-in prompt closed or blocked. Please retry Google Sign-In.");
       } else {
         setAuthError(err.message || "Google Sign-In failed. Please try again.");
       }

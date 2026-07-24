@@ -2,7 +2,8 @@ import React, { useState, useEffect } from "react";
 import { ShieldAlert, Ambulance, Shield, CheckCircle2, AlertCircle, Radio, Sparkles, Lock, LogOut, UserCheck } from "lucide-react";
 import { Role, UserSession } from "../types";
 import { NotificationService } from "../services/notification";
-import { auth, db, googleProvider, signInWithGoogleNativeOrWeb, signOut } from "../lib/firebase";
+import { auth, db, googleProvider, signInWithGoogleNativeOrWeb, signOutUser } from "../lib/firebase";
+import { Capacitor } from "@capacitor/core";
 import { onAuthStateChanged } from "firebase/auth";
 import { doc, getDoc, setDoc } from "firebase/firestore";
 
@@ -128,7 +129,7 @@ export const RoleSelector: React.FC<RoleSelectorProps> = ({ onLogin }) => {
   // Handle Sign Out from Google
   const handleSignOutGoogle = async () => {
     try {
-      await signOut(auth);
+      await signOutUser();
       setGoogleAccount(null);
       setIsProfileRestored(false);
       setOfficerName("");
@@ -303,7 +304,7 @@ export const RoleSelector: React.FC<RoleSelectorProps> = ({ onLogin }) => {
                       d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
                     />
                   </svg>
-                  <span>{isLoggingIn ? "Connecting Google Account..." : "Sign in with Google"}</span>
+                  <span>{isLoggingIn ? "Connecting Google Account..." : "Continue with Google"}</span>
                 </button>
                 <p className="text-[11px] text-slate-400 text-center flex items-center justify-center gap-1">
                   <Lock className="w-3 h-3 text-amber-400" />

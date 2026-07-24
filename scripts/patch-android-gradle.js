@@ -49,3 +49,53 @@ if (fs.existsSync(appBuildGradle)) {
   fs.writeFileSync(appBuildGradle, content, 'utf8');
   console.log('✅ Patched android/app/build.gradle with google-services plugin, play-services-auth, and Firebase BoM');
 }
+
+// 3. Patch MainActivity.java to register FirebaseAuthenticationPlugin explicitly
+function patchMainActivity() {
+  const javaBaseDir = path.join(process.cwd(), 'android', 'app', 'src', 'main', 'java');
+  if (!fs.existsSync(javaBaseDir)) return;
+
+  function findMainActivity(dir) {
+    const files = fs.readdirSync(dir);
+    for (const file of files) {
+      const fullPath = path.join(dir, file);
+      if (fs.statSync(fullPath).isDirectory()) {
+        const found = findMainActivity(fullPath);
+        if (found) return found;
+      } else if (file === 'MainActivity.java') {
+        return fullPath;
+      }
+    }
+    return null;
+  }
+
+  const mainActivityPath = findMainActivity(javaBaseDir);
+  if (mainActivityPath) {
+    let content = fs.readFileSync(mainActivityPath, 'utf8');
+    if (!content.includes('FirebaseAuthenticationPlugin')) {
+      if (!content.includes('import io.capawesome.capacitorjs.plugins.firebase.authentication.FirebaseAuthenticationPlugin;')) {
+        content = content.replace(
+          'import com.getcapacitor.BridgeActivity;',
+          'import com.getcapacitor.BridgeActivity;\nimport io.capawesome.capacitorjs.plugins.firebase.authentication.FirebaseAuthenticationPlugin;\nimport android.os.Bundle;'
+        );
+      }
+      if (!content.includes('registerPlugin(FirebaseAuthenticationPlugin.class)')) {
+        const onCreateMethod = `
+    @Override
+    public void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        registerPlugin(FirebaseAuthenticationPlugin.class);
+    }
+`;
+        content = content.replace(
+          /public class MainActivity extends BridgeActivity \{/,
+          `public class MainActivity extends BridgeActivity {\n${onCreateMethod}`
+        );
+      }
+      fs.writeFileSync(mainActivityPath, content, 'utf8');
+      console.log('✅ Patched MainActivity.java with explicit FirebaseAuthenticationPlugin registration');
+    }
+  }
+}
+
+patchMainActivity();

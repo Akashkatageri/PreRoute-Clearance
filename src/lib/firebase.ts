@@ -30,28 +30,45 @@ export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId || "(defa
  * Fallback to Firebase Web SDK signInWithPopup on desktop/mobile browsers.
  */
 export async function signInWithGoogleNativeOrWeb(): Promise<User> {
-  if (Capacitor.isNativePlatform()) {
-    // Strictly execute native Google Sign-In on Android/iOS via Capawesome plugin
-    // This displays the native "Select an account" bottom-sheet directly inside the app
-    const result = await FirebaseAuthentication.signInWithGoogle({
-      scopes: ['profile', 'email']
-    });
+  const isPluginAvailable =
+    Capacitor.isNativePlatform() &&
+    Capacitor.isPluginAvailable('FirebaseAuthentication');
 
-    const idToken = result.credential?.idToken || (result as any).idToken;
-    const accessToken = result.credential?.accessToken || (result as any).accessToken;
+  if (isPluginAvailable) {
+    try {
+      // Native Google Sign-In via Capawesome (@capacitor-firebase/authentication)
+      // Displays the native Google Account chooser bottom-sheet directly inside the Android app
+      const result = await FirebaseAuthentication.signInWithGoogle({
+        scopes: ['profile', 'email']
+      });
 
-    if (idToken) {
-      // Exchange native Google ID token for a Firebase user session using signInWithCredential
-      const credential = GoogleAuthProvider.credential(idToken, accessToken);
-      const userCredential = await signInWithCredential(auth, credential);
-      return userCredential.user;
-    } else if (auth.currentUser) {
-      return auth.currentUser;
-    } else {
-      throw new Error("Native Google Sign-In completed but no ID token was returned.");
+      const idToken = result.credential?.idToken || (result as any).idToken;
+      const accessToken = result.credential?.accessToken || (result as any).accessToken;
+
+      if (idToken) {
+        // Exchange native Google ID token for a Firebase user session
+        const credential = GoogleAuthProvider.credential(idToken, accessToken);
+        const userCredential = await signInWithCredential(auth, credential);
+        return userCredential.user;
+      } else if (auth.currentUser) {
+        return auth.currentUser;
+      } else {
+        throw new Error("Native Google Sign-In completed but no ID token was returned.");
+      }
+    } catch (err: any) {
+      console.warn("Native Google Sign-In error, evaluating web fallback:", err);
+      if (
+        err?.message?.includes("not implemented") ||
+        err?.code === "UNIMPLEMENTED" ||
+        err?.message?.includes("Plugin_NOT_INSTALLED")
+      ) {
+        const result = await signInWithPopup(auth, googleProvider);
+        return result.user;
+      }
+      throw err;
     }
   } else {
-    // Web browser platform (e.g. desktop/mobile browser preview): standard web popup
+    // Web browser / preview environment: standard web popup sign-in
     const result = await signInWithPopup(auth, googleProvider);
     return result.user;
   }

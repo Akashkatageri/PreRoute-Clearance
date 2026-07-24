@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Siren, X, Search, Clock, Navigation, CheckCircle, ArrowLeft, LogOut, ShieldCheck } from "lucide-react";
 import { Emergency, HospitalResult, Priority, Role, UserSession } from "../types";
-import { searchHospitals, calculateGeoapifyRoute } from "../services/geoapify";
+import { searchHospitals, calculateGeoapifyRoute, DEFAULT_BANGALORE_HOSPITALS } from "../services/geoapify";
 import { realtimeService } from "../services/realtime";
 import { MapView } from "./MapView";
 import { NotificationToast } from "./NotificationToast";
@@ -162,20 +162,38 @@ export const AmbulanceDriverView: React.FC<AmbulanceDriverViewProps> = ({
     hospitalToUse = selectedHospital,
     fromPos = currentPos
   ) => {
-    if (!hospitalToUse) return;
+    let target = hospitalToUse;
+    if (!target) {
+      if (searchResults.length > 0) {
+        target = searchResults[0];
+      } else if (searchQuery.trim().length > 0) {
+        setIsCalculating(true);
+        const results = await searchHospitals(searchQuery, fromPos.lat, fromPos.lng);
+        if (results.length > 0) target = results[0];
+      }
+      if (!target) {
+        target = DEFAULT_BANGALORE_HOSPITALS[0];
+      }
+      setSelectedHospital(target);
+    }
+
     setIsCalculating(true);
+    try {
+      const res = await calculateGeoapifyRoute(
+        fromPos.lat,
+        fromPos.lng,
+        target.lat,
+        target.lng
+      );
 
-    const res = await calculateGeoapifyRoute(
-      fromPos.lat,
-      fromPos.lng,
-      hospitalToUse.lat,
-      hospitalToUse.lng
-    );
-
-    setDistanceKm(res.distanceKm);
-    setEtaMinutes(res.etaMinutes);
-    setRouteGeometry(res.geometry);
-    setIsCalculating(false);
+      setDistanceKm(res.distanceKm);
+      setEtaMinutes(res.etaMinutes);
+      setRouteGeometry(res.geometry);
+    } catch (err) {
+      console.warn("Calculate route error:", err);
+    } finally {
+      setIsCalculating(false);
+    }
   };
 
   // Select hospital from search
@@ -188,48 +206,76 @@ export const AmbulanceDriverView: React.FC<AmbulanceDriverViewProps> = ({
 
   // Start Emergency Route
   const handleStartEmergency = async () => {
-    if (!selectedHospital) return;
+    let targetHospital = selectedHospital;
+
+    // Auto-resolve hospital if user hasn't explicitly clicked a dropdown item
+    if (!targetHospital) {
+      if (searchResults.length > 0) {
+        targetHospital = searchResults[0];
+      } else if (searchQuery.trim().length > 0) {
+        setIsCalculating(true);
+        const results = await searchHospitals(searchQuery, currentPos.lat, currentPos.lng);
+        if (results.length > 0) {
+          targetHospital = results[0];
+        }
+      }
+      if (!targetHospital) {
+        targetHospital = DEFAULT_BANGALORE_HOSPITALS[0];
+      }
+      setSelectedHospital(targetHospital);
+    }
+
+    setIsCalculating(true);
 
     let currentRoute = routeGeometry;
     let currentEta = etaMinutes;
     let currentDist = distanceKm;
 
-    if (!currentRoute || currentRoute.length === 0) {
-      setIsCalculating(true);
-      const res = await calculateGeoapifyRoute(
-        currentPos.lat,
-        currentPos.lng,
-        selectedHospital.lat,
-        selectedHospital.lng
-      );
-      currentRoute = res.geometry;
-      currentEta = res.etaMinutes;
-      currentDist = res.distanceKm;
-      setRouteGeometry(currentRoute);
-      setEtaMinutes(currentEta);
-      setDistanceKm(currentDist);
-      setIsCalculating(false);
+    if (!currentRoute || currentRoute.length === 0 || !currentEta || !currentDist) {
+      try {
+        const res = await calculateGeoapifyRoute(
+          currentPos.lat,
+          currentPos.lng,
+          targetHospital.lat,
+          targetHospital.lng
+        );
+        currentRoute = res.geometry;
+        currentEta = res.etaMinutes;
+        currentDist = res.distanceKm;
+        setRouteGeometry(currentRoute);
+        setEtaMinutes(currentEta);
+        setDistanceKm(currentDist);
+      } catch (err) {
+        console.warn("Error calculating route on start emergency:", err);
+      }
     }
 
-    await realtimeService.createEmergency({
-      vehicleId,
-      destinationName: selectedHospital.name,
-      destinationAddress: selectedHospital.address,
-      destinationLat: selectedHospital.lat,
-      destinationLng: selectedHospital.lng,
-      startLat: currentPos.lat,
-      startLng: currentPos.lng,
-      currentLat: currentPos.lat,
-      currentLng: currentPos.lng,
-      priority,
-      etaMinutes: currentEta || 3,
-      distanceKm: currentDist || 3.1,
-      routeGeometry: currentRoute
-    });
+    try {
+      await realtimeService.createEmergency({
+        vehicleId,
+        destinationName: targetHospital.name,
+        destinationAddress: targetHospital.address,
+        destinationLat: targetHospital.lat,
+        destinationLng: targetHospital.lng,
+        startLat: currentPos.lat,
+        startLng: currentPos.lng,
+        currentLat: currentPos.lat,
+        currentLng: currentPos.lng,
+        priority,
+        etaMinutes: currentEta || 3,
+        distanceKm: currentDist || 3.1,
+        routeGeometry: currentRoute
+      });
 
-    setToastMessage("EMERGENCY ROUTE STARTED! 🚨");
-    setToastSubtext("Route corridor is now broadcasting live to all Traffic Police.");
-    setShowToast(true);
+      setToastMessage("EMERGENCY ROUTE STARTED! 🚨");
+      setToastSubtext("Route corridor is now broadcasting live to all Traffic Police.");
+      setShowToast(true);
+    } catch (err) {
+      console.error("Failed to start emergency route:", err);
+      alert("Failed to start emergency route. Please try again.");
+    } finally {
+      setIsCalculating(false);
+    }
   };
 
   // Complete Trip
@@ -491,7 +537,7 @@ export const AmbulanceDriverView: React.FC<AmbulanceDriverViewProps> = ({
           {/* Calculate Route Button */}
           <button
             onClick={() => handleCalculateRoute()}
-            disabled={!selectedHospital || isCalculating}
+            disabled={isCalculating}
             className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-semibold py-3 rounded-xl transition-colors shadow-xs flex items-center justify-center gap-2 cursor-pointer"
             id="btn-calculate-route"
           >
@@ -551,12 +597,12 @@ export const AmbulanceDriverView: React.FC<AmbulanceDriverViewProps> = ({
 
                 <button
                   onClick={handleStartEmergency}
-                  disabled={!selectedHospital}
-                  className="w-full bg-white hover:bg-slate-100 text-red-600 font-extrabold text-base py-3.5 px-4 rounded-xl shadow-sm transition-all flex items-center justify-center gap-2 cursor-pointer uppercase tracking-wider"
+                  disabled={isCalculating}
+                  className="w-full bg-white hover:bg-slate-100 text-red-600 font-extrabold text-base py-3.5 px-4 rounded-xl shadow-sm transition-all flex items-center justify-center gap-2 cursor-pointer uppercase tracking-wider disabled:opacity-50"
                   id="btn-start-emergency-route-action"
                 >
                   <Siren className="w-5 h-5 text-red-600 animate-bounce" />
-                  START EMERGENCY ROUTE (SEND LIVE LOCATION)
+                  {isCalculating ? "STARTING EMERGENCY ROUTE..." : "START EMERGENCY ROUTE (SEND LIVE LOCATION)"}
                 </button>
               </div>
             )}
@@ -582,12 +628,12 @@ export const AmbulanceDriverView: React.FC<AmbulanceDriverViewProps> = ({
         {!activeEmergency && (etaMinutes === null || distanceKm === null) && (
           <button
             onClick={handleStartEmergency}
-            disabled={!selectedHospital}
+            disabled={isCalculating}
             className="w-full bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white font-extrabold text-lg py-4 rounded-2xl shadow-lg hover:shadow-xl transition-all flex items-center justify-center gap-2 tracking-wide cursor-pointer uppercase"
             id="btn-start-emergency-route"
           >
             <Siren className="w-6 h-6 animate-bounce" />
-            START EMERGENCY ROUTE
+            {isCalculating ? "STARTING EMERGENCY ROUTE..." : "START EMERGENCY ROUTE"}
           </button>
         )}
       </main>

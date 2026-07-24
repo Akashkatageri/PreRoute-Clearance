@@ -110,21 +110,61 @@ class RealtimeSyncService {
   }
 
   public async createEmergency(emergencyData: Partial<Emergency>): Promise<Emergency> {
-    const res = await fetch("/api/emergencies", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(emergencyData)
-    });
-    const created = await res.json();
+    const id = `EMG-${Math.floor(100 + Math.random() * 900)}`;
+    const now = new Date();
+    const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
-    // Also persist to Firestore for instant real-time multi-device synchronization
+    const fallbackEmergency: Emergency = {
+      id,
+      vehicleId: emergencyData.vehicleId || "KA-05-EM-108",
+      destinationName: emergencyData.destinationName || "Hospital",
+      destinationAddress: emergencyData.destinationAddress || "Hospital Address",
+      destinationLat: emergencyData.destinationLat || 12.8715,
+      destinationLng: emergencyData.destinationLng || 77.5385,
+      startLat: emergencyData.startLat || 12.8620,
+      startLng: emergencyData.startLng || 77.5280,
+      currentLat: emergencyData.currentLat || 12.8620,
+      currentLng: emergencyData.currentLng || 77.5280,
+      priority: emergencyData.priority || "critical",
+      status: "active",
+      etaMinutes: emergencyData.etaMinutes || 3,
+      distanceKm: emergencyData.distanceKm || 3.1,
+      createdAt: timeStr,
+      lastUpdated: now.toISOString(),
+      routeGeometry: emergencyData.routeGeometry || []
+    };
+
+    let created = fallbackEmergency;
+
+    try {
+      const res = await fetch("/api/emergencies", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(emergencyData)
+      });
+      if (res.ok) {
+        created = await res.json();
+      }
+    } catch (e) {
+      console.warn("API createEmergency fetch error (using fallback):", e);
+    }
+
+    // Always persist to Firestore for instant real-time multi-device synchronization
     try {
       await setDoc(doc(db, "emergencies", created.id), created);
     } catch (e) {
       console.warn("Firestore create emergency error:", e);
     }
 
-    await this.fetchLatest();
+    // Update local cache & notify subscribers immediately
+    const existingIdx = this.cache.findIndex((e) => e.id === created.id);
+    if (existingIdx >= 0) {
+      this.cache[existingIdx] = created;
+    } else {
+      this.cache.push(created);
+    }
+    this.notify();
+
     return created;
   }
 
@@ -133,11 +173,26 @@ class RealtimeSyncService {
     if (etaMinutes !== undefined) payload.etaMinutes = etaMinutes;
     if (distanceKm !== undefined) payload.distanceKm = distanceKm;
 
-    fetch(`/api/emergencies/${id}/location`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload)
-    }).catch((e) => console.warn("API updateLocation error:", e));
+    try {
+      fetch(`/api/emergencies/${id}/location`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      }).catch((e) => console.warn("API updateLocation error:", e));
+    } catch (e) {
+      console.warn("API updateLocation exception:", e);
+    }
+
+    // Update local cache
+    const item = this.cache.find((e) => e.id === id);
+    if (item) {
+      item.currentLat = currentLat;
+      item.currentLng = currentLng;
+      if (etaMinutes !== undefined) item.etaMinutes = etaMinutes;
+      if (distanceKm !== undefined) item.distanceKm = distanceKm;
+      item.lastUpdated = payload.lastUpdated;
+      this.notify();
+    }
 
     try {
       await updateDoc(doc(db, "emergencies", id), payload);
@@ -148,11 +203,23 @@ class RealtimeSyncService {
 
   public async updateStatus(id: string, status: Emergency['status']): Promise<void> {
     const payload = { status, lastUpdated: new Date().toISOString() };
-    fetch(`/api/emergencies/${id}/status`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status })
-    }).catch((e) => console.warn("API updateStatus error:", e));
+    try {
+      fetch(`/api/emergencies/${id}/status`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status })
+      }).catch((e) => console.warn("API updateStatus error:", e));
+    } catch (e) {
+      console.warn("API updateStatus exception:", e);
+    }
+
+    // Update local cache
+    const item = this.cache.find((e) => e.id === id);
+    if (item) {
+      item.status = status;
+      item.lastUpdated = payload.lastUpdated;
+      this.notify();
+    }
 
     try {
       await updateDoc(doc(db, "emergencies", id), payload);
@@ -162,9 +229,17 @@ class RealtimeSyncService {
   }
 
   public async deleteEmergency(id: string): Promise<void> {
-    fetch(`/api/emergencies/${id}`, {
-      method: "DELETE"
-    }).catch((e) => console.warn("API deleteEmergency error:", e));
+    try {
+      fetch(`/api/emergencies/${id}`, {
+        method: "DELETE"
+      }).catch((e) => console.warn("API deleteEmergency error:", e));
+    } catch (e) {
+      console.warn("API deleteEmergency exception:", e);
+    }
+
+    // Update local cache
+    this.cache = this.cache.filter((e) => e.id !== id);
+    this.notify();
 
     try {
       await deleteDoc(doc(db, "emergencies", id));

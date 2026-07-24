@@ -38,11 +38,13 @@ jobs:
           GOOGLE_SERVICES_BASE64: ${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}
         run: |
           node scripts/ensure-google-services.js
+          node scripts/ensure-keystore.js
           if [ ! -f "android/gradlew" ]; then
             rm -rf android
             npx cap add android
           fi
           node scripts/ensure-google-services.js
+          node scripts/ensure-keystore.js
           npx cap sync android
           node scripts/patch-android-gradle.js
           npx cap sync android
@@ -55,13 +57,9 @@ jobs:
           if [ -n "$KEYSTORE_BASE64" ]; then
             echo "$KEYSTORE_BASE64" | base64 --decode > android/app/debug.keystore
             echo "✅ Decoded custom keystore from ANDROID_KEYSTORE_BASE64 secret"
-          elif [ ! -f "android/app/debug.keystore" ]; then
-            echo "⚙️ Generating default fixed debug keystore..."
-            keytool -genkey -v -keystore android/app/debug.keystore \
-              -storepass android -alias androiddebugkey -keypass android \
-              -keyalg RSA -keysize 2048 -validity 10000 \
-              -dname "CN=Android Debug,O=Android,C=US"
-            echo "✅ Created android/app/debug.keystore"
+          else
+            node scripts/ensure-keystore.js
+            echo "✅ Ensured permanent fixed keystore from scripts/ensure-keystore.js"
           fi
           echo "======================================================="
           echo "🔑 BUILD APK SHA-1 FINGERPRINT FOR FIREBASE CONSOLE:"

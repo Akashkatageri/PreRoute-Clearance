@@ -37,6 +37,14 @@ const DEFAULT_GOOGLE_SERVICES = {
           }
         },
         {
+          "client_id": "540691753241-e3ipo887jks7oelids2o2kgpmqtno9cc.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.PreRoute.app",
+            "certificate_hash": "82cbbc228622e7ac2cf074c85b4b373fad871023"
+          }
+        },
+        {
           "client_id": "540691753241-pcq4g6kdee8r4nmpb34d1bbq7ha0lg1r.apps.googleusercontent.com",
           "client_type": 3
         }

@@ -49,8 +49,57 @@ jobs:
             cp google-services.json android/app/google-services.json
             echo "✅ Copied google-services.json from root"
           else
-            echo "❌ ERROR: google-services.json missing in workspace and GOOGLE_SERVICES_JSON_BASE64 secret is not set!"
-            exit 1
+            echo "⚠️ google-services.json not found in root; creating default configuration..."
+            cat << 'EOF' > android/app/google-services.json
+{
+  "project_info": {
+    "project_number": "540691753241",
+    "project_id": "preroute-01",
+    "storage_bucket": "preroute-01.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:540691753241:android:0c20089fdbc8bceda8bd88",
+        "android_client_info": {
+          "package_name": "com.PreRoute.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "540691753241-hv25c44p2ulnvvcb3kpqt1p9k67eihv9.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.PreRoute.app",
+            "certificate_hash": "fc0365cf5405d9c27a50b6ee2683b3ae218c716d"
+          }
+        },
+        {
+          "client_id": "540691753241-pcq4g6kdee8r4nmpb34d1bbq7ha0lg1r.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDqhkwUsJ9zianGEosN1NW_w-gKveMa3Ik"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "540691753241-pcq4g6kdee8r4nmpb34d1bbq7ha0lg1r.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
+EOF
+            echo "✅ Generated android/app/google-services.json"
           fi
           npx cap sync android
           node scripts/patch-android-gradle.js

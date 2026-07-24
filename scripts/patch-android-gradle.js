@@ -102,3 +102,39 @@ function patchMainActivity() {
 }
 
 patchMainActivity();
+
+// 4. Patch strings.xml to include default_web_client_id for Google Native Sign-In
+function patchStringsXml() {
+  const stringsPath = path.join(process.cwd(), 'android', 'app', 'src', 'main', 'res', 'values', 'strings.xml');
+  const webClientId = "540691753241-pcq4g6kdee8r4nmpb34d1bbq7ha0lg1r.apps.googleusercontent.com";
+
+  if (fs.existsSync(stringsPath)) {
+    let content = fs.readFileSync(stringsPath, 'utf8');
+    if (!content.includes('default_web_client_id')) {
+      content = content.replace(
+        '</resources>',
+        `    <string name="default_web_client_id">${webClientId}</string>\n</resources>`
+      );
+      fs.writeFileSync(stringsPath, content, 'utf8');
+      console.log('✅ Added default_web_client_id to android/app/src/main/res/values/strings.xml');
+    }
+  } else {
+    const resValuesDir = path.dirname(stringsPath);
+    if (fs.existsSync(path.join(process.cwd(), 'android', 'app'))) {
+      fs.mkdirSync(resValuesDir, { recursive: true });
+      const newStrings = `<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">PreRoute</string>
+    <string name="title_activity_main">PreRoute</string>
+    <string name="package_name">com.PreRoute.app</string>
+    <string name="custom_url_scheme">com.PreRoute.app</string>
+    <string name="default_web_client_id">${webClientId}</string>
+</resources>
+`;
+      fs.writeFileSync(stringsPath, newStrings, 'utf8');
+      console.log('✅ Created android/app/src/main/res/values/strings.xml with default_web_client_id');
+    }
+  }
+}
+
+patchStringsXml();

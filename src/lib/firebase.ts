@@ -38,19 +38,16 @@ export async function signInWithGoogleNativeOrWeb(): Promise<User> {
     try {
       console.log("Initiating native Google Sign-In...");
 
-      // Native Google Sign-In via Capawesome (@capacitor-firebase/authentication)
-      // On Android, useCredentialManager: false forces the standard Google Account chooser bottom-sheet,
-      // avoiding "No credentials available" errors caused by CredentialManager's saved passkey lookup.
       let result;
       try {
         result = await FirebaseAuthentication.signInWithGoogle({
-          scopes: ['profile', 'email'],
-          useCredentialManager: false
+          scopes: ['profile', 'email']
         });
       } catch (credErr: any) {
-        console.warn("Native Google Sign-In (useCredentialManager: false) failed, retrying with default native options:", credErr);
+        console.warn("Native Google Sign-In standard call failed, trying useCredentialManager: false fallback:", credErr);
         result = await FirebaseAuthentication.signInWithGoogle({
-          scopes: ['profile', 'email']
+          scopes: ['profile', 'email'],
+          useCredentialManager: false
         });
       }
 

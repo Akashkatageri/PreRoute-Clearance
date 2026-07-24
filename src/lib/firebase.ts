@@ -36,11 +36,23 @@ export async function signInWithGoogleNativeOrWeb(): Promise<User> {
 
   if (isPluginAvailable) {
     try {
+      console.log("Initiating native Google Sign-In...");
+
       // Native Google Sign-In via Capawesome (@capacitor-firebase/authentication)
-      // Displays the native Google Account chooser bottom-sheet directly inside the Android app
-      const result = await FirebaseAuthentication.signInWithGoogle({
-        scopes: ['profile', 'email']
-      });
+      // On Android, useCredentialManager: false forces the standard Google Account chooser bottom-sheet,
+      // avoiding "No credentials available" errors caused by CredentialManager's saved passkey lookup.
+      let result;
+      try {
+        result = await FirebaseAuthentication.signInWithGoogle({
+          scopes: ['profile', 'email'],
+          useCredentialManager: false
+        });
+      } catch (credErr: any) {
+        console.warn("Native Google Sign-In (useCredentialManager: false) failed, retrying with default native options:", credErr);
+        result = await FirebaseAuthentication.signInWithGoogle({
+          scopes: ['profile', 'email']
+        });
+      }
 
       const idToken = result.credential?.idToken || (result as any).idToken;
       const accessToken = result.credential?.accessToken || (result as any).accessToken;
@@ -56,15 +68,7 @@ export async function signInWithGoogleNativeOrWeb(): Promise<User> {
         throw new Error("Native Google Sign-In completed but no ID token was returned.");
       }
     } catch (err: any) {
-      console.warn("Native Google Sign-In error, evaluating web fallback:", err);
-      if (
-        err?.message?.includes("not implemented") ||
-        err?.code === "UNIMPLEMENTED" ||
-        err?.message?.includes("Plugin_NOT_INSTALLED")
-      ) {
-        const result = await signInWithPopup(auth, googleProvider);
-        return result.user;
-      }
+      console.error("Native Google Sign-In error:", err);
       throw err;
     }
   } else {

@@ -30,7 +30,9 @@ export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId || "(defa
  * Fallback to Firebase Web SDK signInWithPopup on desktop/mobile browsers.
  */
 export async function signInWithGoogleNativeOrWeb(): Promise<User> {
-  if (Capacitor.isNativePlatform()) {
+  const isPluginAvailable = Capacitor.isNativePlatform() && Capacitor.isPluginAvailable('FirebaseAuthentication');
+
+  if (isPluginAvailable) {
     try {
       // 1. Native Google Sign-In via Capawesome (@capacitor-firebase/authentication)
       const result = await FirebaseAuthentication.signInWithGoogle({
@@ -51,18 +53,27 @@ export async function signInWithGoogleNativeOrWeb(): Promise<User> {
         throw new Error("Native Google Sign-In completed but no ID token was returned.");
       }
     } catch (err: any) {
-      console.warn("Native Google Sign-In error:", err);
+      console.warn("Native Google Sign-In error / missing implementation, trying web fallback:", err);
+      // Fallback to Web popup if native plugin fails or is unimplemented
+      if (
+        err?.message?.includes("not implemented") ||
+        err?.code === "UNIMPLEMENTED" ||
+        err?.message?.includes("Plugin_NOT_INSTALLED")
+      ) {
+        const result = await signInWithPopup(auth, googleProvider);
+        return result.user;
+      }
       throw err;
     }
   } else {
-    // Web browser platform: standard popup sign-in
+    // Web browser platform / non-native environment: standard popup sign-in
     const result = await signInWithPopup(auth, googleProvider);
     return result.user;
   }
 }
 
 export async function signOutUser(): Promise<void> {
-  if (Capacitor.isNativePlatform()) {
+  if (Capacitor.isNativePlatform() && Capacitor.isPluginAvailable('FirebaseAuthentication')) {
     try {
       await FirebaseAuthentication.signOut();
     } catch (e) {

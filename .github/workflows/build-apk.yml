@@ -39,12 +39,10 @@ jobs:
             rm -rf android
             npx cap add android
           fi
-          npx cap sync android
-
-      - name: Copy Google Services Configuration
-        run: |
           mkdir -p android/app
           cp google-services.json android/app/google-services.json || true
+          node scripts/patch-android-gradle.js
+          npx cap sync android
 
       - name: Decode Android Keystore
         env:
@@ -53,10 +51,6 @@ jobs:
         run: |
           mkdir -p android/app
           echo "$KEYSTORE_BASE64" | base64 --decode > android/app/debug.keystore
-
-      - name: Patch Android Gradle Config
-        run: |
-          node scripts/patch-android-gradle.js
 
       - name: Build Debug APK
         run: |

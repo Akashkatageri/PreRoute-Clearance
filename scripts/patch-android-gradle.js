@@ -46,8 +46,23 @@ if (fs.existsSync(appBuildGradle)) {
     }
   }
 
+  // Ensure debug signing config uses android/app/debug.keystore if available
+  if (!content.includes("storeFile file('debug.keystore')")) {
+    if (content.includes('signingConfigs {')) {
+      content = content.replace(
+        'signingConfigs {',
+        `signingConfigs {\n        debug {\n            if (file('debug.keystore').exists()) {\n                storeFile file('debug.keystore')\n                storePassword 'android'\n                keyAlias 'androiddebugkey'\n                keyPassword 'android'\n            }\n        }`
+      );
+    } else if (content.includes('android {')) {
+      content = content.replace(
+        'android {',
+        `android {\n    signingConfigs {\n        debug {\n            if (file('debug.keystore').exists()) {\n                storeFile file('debug.keystore')\n                storePassword 'android'\n                keyAlias 'androiddebugkey'\n                keyPassword 'android'\n            }\n        }\n    }`
+      );
+    }
+  }
+
   fs.writeFileSync(appBuildGradle, content, 'utf8');
-  console.log('✅ Patched android/app/build.gradle with google-services plugin, play-services-auth, and Firebase BoM');
+  console.log('✅ Patched android/app/build.gradle with google-services plugin, play-services-auth, Firebase BoM, and signingConfig');
 }
 
 // 3. Patch MainActivity.java to explicitly register FirebaseAuthenticationPlugin BEFORE super.onCreate

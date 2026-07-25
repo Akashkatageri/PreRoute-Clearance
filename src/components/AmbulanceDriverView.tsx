@@ -59,10 +59,14 @@ export const AmbulanceDriverView: React.FC<AmbulanceDriverViewProps> = ({
   const [toastSubtext, setToastSubtext] = useState("Traffic police have been notified with live road corridor.");
   const [showToast, setShowToast] = useState(false);
 
-  // Active Emergency for this vehicle
-  const activeEmergency = activeEmergencies.find(
-    (e) => e.vehicleId === vehicleId && e.status !== "completed"
-  );
+  // Active Emergency for this vehicle (normalized case-insensitive matching with server)
+  const activeEmergency = activeEmergencies.find((e) => {
+    if (!e || e.status === "completed" || e.status === "cleared") return false;
+    const normV = (vehicleId || "").trim().toUpperCase();
+    const normEv = (e.vehicleId || "").trim().toUpperCase();
+    if (normV && normEv) return normV === normEv;
+    return true;
+  });
 
   const prevStatusRef = useRef<string | undefined>(activeEmergency?.status);
 

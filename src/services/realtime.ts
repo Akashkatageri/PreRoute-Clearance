@@ -7,108 +7,61 @@ type Listener = (emergencies: Emergency[]) => void;
 class RealtimeSyncService {
   private listeners: Set<Listener> = new Set();
   private cache: Emergency[] = [];
-  private eventSource: EventSource | null = null;
-  private pollingTimer: any = null;
 
   constructor() {
     this.initFirestoreListener();
-    this.initSSE();
-    this.startPolling();
   }
 
   private initFirestoreListener() {
     try {
       if (typeof window === "undefined") return;
       const emergenciesCol = collection(db, "emergencies");
+
       onSnapshot(emergenciesCol, (snapshot) => {
         const firestoreList: Emergency[] = [];
         snapshot.forEach((docSnap) => {
-          const raw = docSnap.data() as Emergency;
-          if (raw && raw.id) {
-            firestoreList.push({
-              ...raw,
+          const raw = docSnap.data() as Partial<Emergency>;
+          const docId = raw.id || docSnap.id;
+
+          if (docId) {
+            const emergencyItem: Emergency = {
+              id: docId,
               vehicleId: (raw.vehicleId && raw.vehicleId.trim()) || "AMBULANCE-108",
               destinationName: (raw.destinationName && raw.destinationName.trim()) || "General Hospital",
               destinationAddress: (raw.destinationAddress && raw.destinationAddress.trim()) || raw.destinationName || "General Hospital",
+              destinationLat: typeof raw.destinationLat === "number" ? raw.destinationLat : 12.8715,
+              destinationLng: typeof raw.destinationLng === "number" ? raw.destinationLng : 77.5385,
+              startLat: typeof raw.startLat === "number" ? raw.startLat : 12.8620,
+              startLng: typeof raw.startLng === "number" ? raw.startLng : 77.5280,
+              currentLat: typeof raw.currentLat === "number" ? raw.currentLat : (raw.startLat || 12.8620),
+              currentLng: typeof raw.currentLng === "number" ? raw.currentLng : (raw.startLng || 77.5280),
+              priority: raw.priority || "critical",
+              status: raw.status || "active",
               etaMinutes: typeof raw.etaMinutes === "number" && !isNaN(raw.etaMinutes) && raw.etaMinutes >= 0 ? raw.etaMinutes : 3,
               distanceKm: typeof raw.distanceKm === "number" && !isNaN(raw.distanceKm) && raw.distanceKm >= 0 ? raw.distanceKm : 2.5,
               createdAt: (raw.createdAt && raw.createdAt.trim()) || "Just now",
-              priority: raw.priority || "critical"
-            });
+              lastUpdated: raw.lastUpdated || new Date().toISOString(),
+              routeGeometry: raw.routeGeometry || []
+            };
+
+            firestoreList.push(emergencyItem);
           }
         });
 
-        if (firestoreList.length > 0) {
-          this.cache = firestoreList;
-          this.notify();
-        }
+        // Always update cache and notify, even if list is empty (cleared/completed)
+        this.cache = firestoreList;
+        this.notify();
       }, (error) => {
-        console.warn("Firestore onSnapshot error:", error);
+        console.warn("Firestore onSnapshot realtime listener notice:", error);
       });
     } catch (e) {
       console.warn("Could not setup Firestore realtime listener:", e);
     }
   }
 
-  private initSSE() {
-    try {
-      if (typeof window === "undefined") return;
-      this.eventSource = new EventSource("/api/emergencies/stream");
-
-      this.eventSource.onmessage = (event) => {
-        try {
-          const payload = JSON.parse(event.data);
-          if (payload.type === "INIT") {
-            if (payload.data && payload.data.length > 0) {
-              this.cache = payload.data;
-              this.notify();
-            }
-          } else {
-            this.fetchLatest();
-          }
-        } catch (e) {
-          console.error("SSE parse error:", e);
-        }
-      };
-
-      this.eventSource.onerror = () => {
-        if (this.eventSource) {
-          this.eventSource.close();
-          this.eventSource = null;
-        }
-      };
-    } catch (e) {
-      console.warn("SSE init error, using polling:", e);
-    }
-  }
-
-  private startPolling() {
-    if (typeof window === "undefined") return;
-    this.fetchLatest();
-    this.pollingTimer = setInterval(() => {
-      this.fetchLatest();
-    }, 2000);
-  }
-
-  public async fetchLatest(): Promise<Emergency[]> {
-    try {
-      const res = await fetch("/api/emergencies");
-      if (res.ok) {
-        const data = await res.json();
-        if (data && data.length > 0) {
-          this.cache = data;
-          this.notify();
-        }
-        return data;
-      }
-    } catch (e) {
-      console.warn("Fetch emergencies failed:", e);
-    }
-    return this.cache;
-  }
-
   public subscribe(listener: Listener): () => void {
     this.listeners.add(listener);
+    // Notify subscriber immediately with current cloud cache
     listener(this.cache);
     return () => {
       this.listeners.delete(listener);
@@ -117,28 +70,32 @@ class RealtimeSyncService {
 
   private notify() {
     for (const listener of this.listeners) {
-      listener(this.cache);
+      try {
+        listener([...this.cache]);
+      } catch (e) {
+        console.warn("Error notifying realtime listener:", e);
+      }
     }
   }
 
   public async createEmergency(emergencyData: Partial<Emergency>): Promise<Emergency> {
-    const id = `EMG-${Math.floor(100 + Math.random() * 900)}`;
+    const id = emergencyData.id || `EMG-${Math.floor(100 + Math.random() * 900)}`;
     const now = new Date();
     const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
-    const fallbackEmergency: Emergency = {
+    const newEmergency: Emergency = {
       id,
-      vehicleId: emergencyData.vehicleId || "AMBULANCE",
-      destinationName: emergencyData.destinationName || "Hospital",
+      vehicleId: emergencyData.vehicleId || "AMBULANCE-108",
+      destinationName: emergencyData.destinationName || "General Hospital",
       destinationAddress: emergencyData.destinationAddress || "Hospital Address",
       destinationLat: emergencyData.destinationLat || 12.8715,
       destinationLng: emergencyData.destinationLng || 77.5385,
       startLat: emergencyData.startLat || 12.8620,
       startLng: emergencyData.startLng || 77.5280,
-      currentLat: emergencyData.currentLat || 12.8620,
-      currentLng: emergencyData.currentLng || 77.5280,
+      currentLat: emergencyData.currentLat || emergencyData.startLat || 12.8620,
+      currentLng: emergencyData.currentLng || emergencyData.startLng || 77.5280,
       priority: emergencyData.priority || "critical",
-      status: "active",
+      status: emergencyData.status || "active",
       etaMinutes: emergencyData.etaMinutes || 3,
       distanceKm: emergencyData.distanceKm || 3.1,
       createdAt: timeStr,
@@ -146,56 +103,47 @@ class RealtimeSyncService {
       routeGeometry: emergencyData.routeGeometry || []
     };
 
-    let created = fallbackEmergency;
-
+    // 1. Immediately persist to Firestore cloud database (guarantees cross-device sync web <-> android)
     try {
-      const res = await fetch("/api/emergencies", {
+      await setDoc(doc(db, "emergencies", id), newEmergency);
+    } catch (e) {
+      console.warn("Firestore setDoc create emergency error:", e);
+    }
+
+    // 2. Also send to Express server API route
+    try {
+      await fetch("/api/emergencies", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(emergencyData)
-      });
-      if (res.ok) {
-        created = await res.json();
-      }
+        body: JSON.stringify(newEmergency)
+      }).catch((e) => console.warn("Express API create Emergency notice:", e));
     } catch (e) {
-      console.warn("API createEmergency fetch error (using fallback):", e);
+      console.warn("API createEmergency fetch error:", e);
     }
 
-    // Always persist to Firestore for instant real-time multi-device synchronization
-    try {
-      await setDoc(doc(db, "emergencies", created.id), created);
-    } catch (e) {
-      console.warn("Firestore create emergency error:", e);
-    }
-
-    // Update local cache & notify subscribers immediately
-    const existingIdx = this.cache.findIndex((e) => e.id === created.id);
+    // 3. Update local cache
+    const existingIdx = this.cache.findIndex((e) => e.id === id);
     if (existingIdx >= 0) {
-      this.cache[existingIdx] = created;
+      this.cache[existingIdx] = newEmergency;
     } else {
-      this.cache.push(created);
+      this.cache.push(newEmergency);
     }
     this.notify();
 
-    return created;
+    return newEmergency;
   }
 
   public async updateLocation(id: string, currentLat: number, currentLng: number, etaMinutes?: number, distanceKm?: number): Promise<void> {
-    const payload: any = { currentLat, currentLng, lastUpdated: new Date().toISOString() };
+    const payload: any = {
+      id,
+      currentLat,
+      currentLng,
+      lastUpdated: new Date().toISOString()
+    };
     if (etaMinutes !== undefined) payload.etaMinutes = etaMinutes;
     if (distanceKm !== undefined) payload.distanceKm = distanceKm;
 
-    try {
-      fetch(`/api/emergencies/${id}/location`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload)
-      }).catch((e) => console.warn("API updateLocation error:", e));
-    } catch (e) {
-      console.warn("API updateLocation exception:", e);
-    }
-
-    // Update local cache
+    // Update local cache state immediately
     const item = this.cache.find((e) => e.id === id);
     if (item) {
       item.currentLat = currentLat;
@@ -206,15 +154,48 @@ class RealtimeSyncService {
       this.notify();
     }
 
+    // Persist to Firestore server database
     try {
       await updateDoc(doc(db, "emergencies", id), payload);
     } catch (e) {
       console.warn("Firestore updateLocation error:", e);
     }
+
+    // Also update Express backend
+    try {
+      fetch(`/api/emergencies/${id}/location`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      }).catch((e) => console.warn("API updateLocation error:", e));
+    } catch (e) {
+      console.warn("API updateLocation exception:", e);
+    }
   }
 
   public async updateStatus(id: string, status: Emergency['status']): Promise<void> {
-    const payload = { status, lastUpdated: new Date().toISOString() };
+    const payload = {
+      id,
+      status,
+      lastUpdated: new Date().toISOString()
+    };
+
+    // Update local cache state immediately
+    const item = this.cache.find((e) => e.id === id);
+    if (item) {
+      item.status = status;
+      item.lastUpdated = payload.lastUpdated;
+      this.notify();
+    }
+
+    // Persist to Firestore server database with merge
+    try {
+      await setDoc(doc(db, "emergencies", id), payload, { merge: true });
+    } catch (e) {
+      console.warn("Firestore updateStatus error:", e);
+    }
+
+    // Also update Express backend
     try {
       fetch(`/api/emergencies/${id}/status`, {
         method: "PUT",
@@ -224,39 +205,27 @@ class RealtimeSyncService {
     } catch (e) {
       console.warn("API updateStatus exception:", e);
     }
-
-    // Update local cache
-    const item = this.cache.find((e) => e.id === id);
-    if (item) {
-      item.status = status;
-      item.lastUpdated = payload.lastUpdated;
-      this.notify();
-    }
-
-    try {
-      await setDoc(doc(db, "emergencies", id), payload, { merge: true });
-    } catch (e) {
-      console.warn("Firestore updateStatus error:", e);
-    }
   }
 
   public async deleteEmergency(id: string): Promise<void> {
+    // Update local cache
+    this.cache = this.cache.filter((e) => e.id !== id);
+    this.notify();
+
+    // Remove from Firestore
+    try {
+      await deleteDoc(doc(db, "emergencies", id));
+    } catch (e) {
+      console.warn("Firestore deleteEmergency error:", e);
+    }
+
+    // Remove from Express backend
     try {
       fetch(`/api/emergencies/${id}`, {
         method: "DELETE"
       }).catch((e) => console.warn("API deleteEmergency error:", e));
     } catch (e) {
       console.warn("API deleteEmergency exception:", e);
-    }
-
-    // Update local cache
-    this.cache = this.cache.filter((e) => e.id !== id);
-    this.notify();
-
-    try {
-      await deleteDoc(doc(db, "emergencies", id));
-    } catch (e) {
-      console.warn("Firestore deleteEmergency error:", e);
     }
   }
 }

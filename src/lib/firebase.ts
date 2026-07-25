@@ -44,15 +44,25 @@ export async function signInWithGoogleNativeOrWeb(): Promise<User> {
           scopes: ['profile', 'email']
         });
       } catch (credErr: any) {
-        console.warn("Native Google Sign-In standard call failed, trying useCredentialManager: false fallback:", credErr);
-        result = await FirebaseAuthentication.signInWithGoogle({
-          scopes: ['profile', 'email'],
-          useCredentialManager: false
-        });
+        console.warn("Native Google Sign-In primary attempt failed, performing reset & retry:", credErr);
+        // Clear lingering native session state before retrying
+        await FirebaseAuthentication.signOut().catch(() => {});
+        try {
+          result = await FirebaseAuthentication.signInWithGoogle({
+            scopes: ['profile', 'email'],
+            useCredentialManager: false
+          });
+        } catch (credErr2: any) {
+          console.warn("Native Google Sign-In fallback attempt failed:", credErr2);
+          await FirebaseAuthentication.signOut().catch(() => {});
+          result = await FirebaseAuthentication.signInWithGoogle({
+            scopes: ['profile', 'email']
+          });
+        }
       }
 
-      const idToken = result.credential?.idToken || (result as any).idToken;
-      const accessToken = result.credential?.accessToken || (result as any).accessToken;
+      const idToken = result?.credential?.idToken || (result as any)?.idToken;
+      const accessToken = result?.credential?.accessToken || (result as any)?.accessToken;
 
       if (idToken) {
         // Exchange native Google ID token for a Firebase user session
@@ -62,10 +72,18 @@ export async function signInWithGoogleNativeOrWeb(): Promise<User> {
       } else if (auth.currentUser) {
         return auth.currentUser;
       } else {
+        const currentUser = await FirebaseAuthentication.getCurrentUser().catch(() => null);
+        if (currentUser?.user && auth.currentUser) {
+          return auth.currentUser;
+        }
         throw new Error("Native Google Sign-In completed but no ID token was returned.");
       }
     } catch (err: any) {
       console.error("Native Google Sign-In error:", err);
+      const errMsg = String(err?.message || err || "");
+      if (errMsg.includes("7") || errMsg.toLowerCase().includes("network")) {
+        throw new Error("Google Sign-In network connection issue (Error 7). Please check your internet connection or Google Play Services and try again.");
+      }
       throw err;
     }
   } else {

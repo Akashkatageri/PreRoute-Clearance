@@ -177,7 +177,8 @@ export const AmbulanceDriverView: React.FC<AmbulanceDriverViewProps> = ({
         if (results.length > 0) target = results[0];
       }
       if (!target) {
-        target = DEFAULT_BANGALORE_HOSPITALS[0];
+        alert("Please search and select a destination hospital first.");
+        return;
       }
       setSelectedHospital(target);
     }
@@ -225,7 +226,8 @@ export const AmbulanceDriverView: React.FC<AmbulanceDriverViewProps> = ({
         }
       }
       if (!targetHospital) {
-        targetHospital = DEFAULT_BANGALORE_HOSPITALS[0];
+        alert("Please search and select a destination hospital first.");
+        return;
       }
       setSelectedHospital(targetHospital);
     }
@@ -473,70 +475,6 @@ export const AmbulanceDriverView: React.FC<AmbulanceDriverViewProps> = ({
                 )}
               </div>
             )}
-          </div>
-
-          {/* Field 2: Emergency Priority */}
-          <div className="flex flex-col gap-2">
-            <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
-              <Siren className="w-3.5 h-3.5 text-slate-400" />
-              EMERGENCY PRIORITY
-            </label>
-
-            <div className="flex flex-col gap-2">
-              <label
-                className={`flex items-center gap-3 p-3 rounded-xl border transition-all cursor-pointer ${
-                  priority === "critical"
-                    ? "border-red-500 bg-red-50/40 text-red-900 font-semibold"
-                    : "border-slate-200 hover:bg-slate-50 text-slate-700"
-                }`}
-              >
-                <input
-                  type="radio"
-                  name="priority"
-                  checked={priority === "critical"}
-                  onChange={() => setPriority("critical")}
-                  className="hidden"
-                />
-                <span className="w-3 h-3 rounded-full bg-red-500 shrink-0" />
-                <span className="text-sm">Critical — Life threatening</span>
-              </label>
-
-              <label
-                className={`flex items-center gap-3 p-3 rounded-xl border transition-all cursor-pointer ${
-                  priority === "high"
-                    ? "border-amber-500 bg-amber-50/40 text-amber-900 font-semibold"
-                    : "border-slate-200 hover:bg-slate-50 text-slate-700"
-                }`}
-              >
-                <input
-                  type="radio"
-                  name="priority"
-                  checked={priority === "high"}
-                  onChange={() => setPriority("high")}
-                  className="hidden"
-                />
-                <span className="w-3 h-3 rounded-full bg-amber-500 shrink-0" />
-                <span className="text-sm">High — Serious condition</span>
-              </label>
-
-              <label
-                className={`flex items-center gap-3 p-3 rounded-xl border transition-all cursor-pointer ${
-                  priority === "normal"
-                    ? "border-blue-500 bg-blue-50/40 text-blue-900 font-semibold"
-                    : "border-slate-200 hover:bg-slate-50 text-slate-700"
-                }`}
-              >
-                <input
-                  type="radio"
-                  name="priority"
-                  checked={priority === "normal"}
-                  onChange={() => setPriority("normal")}
-                  className="hidden"
-                />
-                <span className="w-3 h-3 rounded-full bg-blue-500 shrink-0" />
-                <span className="text-sm">Normal — Routine transfer</span>
-              </label>
-            </div>
           </div>
 
           {/* Calculate Route Button */}

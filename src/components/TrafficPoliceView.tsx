@@ -171,6 +171,7 @@ export const TrafficPoliceView: React.FC<TrafficPoliceViewProps> = ({
             </span>
             {activeList.map((emg, idx) => {
               const isSelected = selectedEmergency?.id === emg.id;
+              const isAck = emg.status === "acknowledged";
               return (
                 <button
                   key={emg.id || `emg-bar-${idx}`}
@@ -183,6 +184,11 @@ export const TrafficPoliceView: React.FC<TrafficPoliceViewProps> = ({
                 >
                   <Siren className="w-3.5 h-3.5 animate-pulse shrink-0" />
                   <span>{emg.vehicleId}</span>
+                  {isAck && (
+                    <span className="bg-emerald-500 text-slate-950 font-black text-[9px] px-1.5 py-0.2 rounded-md">
+                      ✓ ACK
+                    </span>
+                  )}
                   <span className={`text-[10px] px-1.5 py-0.2 rounded-md ${isSelected ? "bg-white/20 text-white" : "bg-slate-900 text-slate-400"}`}>
                     {emg.etaMinutes}m
                   </span>
@@ -213,6 +219,7 @@ export const TrafficPoliceView: React.FC<TrafficPoliceViewProps> = ({
             <div className="flex flex-col gap-3">
               {activeList.map((emg, idx) => {
                 const isSelected = selectedEmergency?.id === emg.id;
+                const isAck = emg.status === "acknowledged";
                 return (
                   <button
                     key={emg.id || `emg-sidebar-${idx}`}
@@ -231,9 +238,15 @@ export const TrafficPoliceView: React.FC<TrafficPoliceViewProps> = ({
                         <span className="font-extrabold text-slate-900 text-base truncate">
                           {emg.vehicleId}
                         </span>
-                        <span className="bg-red-500 text-white text-[10px] font-extrabold px-2 py-0.5 rounded-md uppercase shrink-0">
-                          {emg.priority || "critical"}
-                        </span>
+                        {isAck ? (
+                          <span className="bg-emerald-500 text-slate-950 text-[10px] font-black px-2 py-0.5 rounded-md uppercase shrink-0 flex items-center gap-1">
+                            <CheckCircle className="w-3 h-3" /> ACKNOWLEDGED
+                          </span>
+                        ) : (
+                          <span className="bg-red-500 text-white text-[10px] font-extrabold px-2 py-0.5 rounded-md uppercase shrink-0">
+                            {emg.priority || "critical"}
+                          </span>
+                        )}
                       </div>
                       <span className="bg-red-50 text-red-600 font-black text-xs px-2.5 py-1 rounded-lg shrink-0">
                         {emg.etaMinutes}m

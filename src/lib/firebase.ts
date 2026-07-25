@@ -16,7 +16,7 @@ const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 
 export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
-// Prompt user to select an account explicitly every time
+// Set prompt to select_account so Google prompts the user to choose their account
 googleProvider.setCustomParameters({
   prompt: 'select_account'
 });
@@ -76,14 +76,18 @@ export async function signInWithGoogleNativeOrWeb(): Promise<User> {
 }
 
 export async function signOutUser(): Promise<void> {
-  if (Capacitor.isNativePlatform() && Capacitor.isPluginAvailable('FirebaseAuthentication')) {
+  if (Capacitor.isPluginAvailable('FirebaseAuthentication')) {
     try {
       await FirebaseAuthentication.signOut();
     } catch (e) {
-      console.warn("Native Capawesome sign out warning:", e);
+      console.warn("FirebaseAuthentication.signOut() warning:", e);
     }
   }
-  await signOut(auth);
+  try {
+    await signOut(auth);
+  } catch (e) {
+    console.warn("auth.signOut() warning:", e);
+  }
 }
 
 export { signInWithPopup, signInWithCredential, signOut, GoogleAuthProvider };

@@ -222,7 +222,7 @@ class RealtimeSyncService {
     }
 
     try {
-      await updateDoc(doc(db, "emergencies", id), payload);
+      await setDoc(doc(db, "emergencies", id), payload, { merge: true });
     } catch (e) {
       console.warn("Firestore updateStatus error:", e);
     }

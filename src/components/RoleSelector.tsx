@@ -184,6 +184,14 @@ export const RoleSelector: React.FC<RoleSelectorProps> = ({ onLogin }) => {
 
     // Save active session
     localStorage.setItem("ambulance_preclear_session", JSON.stringify(session));
+
+    // Request native Android Location & Notification permissions upon portal entry
+    try {
+      await NotificationService.requestAllPermissions();
+    } catch (e) {
+      console.warn("Permission request error on submit:", e);
+    }
+
     onLogin(session);
   };
 

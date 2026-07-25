@@ -4,7 +4,7 @@ import { realtimeService } from "./services/realtime";
 import { RoleSelector } from "./components/RoleSelector";
 import { AmbulanceDriverView } from "./components/AmbulanceDriverView";
 import { TrafficPoliceView } from "./components/TrafficPoliceView";
-import { auth, signOut } from "./lib/firebase";
+import { auth, signOutUser } from "./lib/firebase";
 
 export default function App() {
   const [session, setSession] = useState<UserSession | null>(() => {
@@ -45,8 +45,8 @@ export default function App() {
     setRole(newSession.role);
   };
 
-  const handleLogout = () => {
-    signOut(auth).catch((err) => console.warn("Firebase signout error:", err));
+  const handleLogout = async () => {
+    await signOutUser().catch((err) => console.warn("Firebase signout error:", err));
     localStorage.removeItem("ambulance_preclear_session");
     setSession(null);
     setRole("select");

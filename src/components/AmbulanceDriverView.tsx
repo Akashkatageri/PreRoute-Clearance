@@ -5,6 +5,7 @@ import { searchHospitals, calculateGeoapifyRoute, DEFAULT_BANGALORE_HOSPITALS } 
 import { realtimeService } from "../services/realtime";
 import { MapView } from "./MapView";
 import { NotificationToast } from "./NotificationToast";
+import { NotificationService } from "../services/notification";
 
 interface AmbulanceDriverViewProps {
   onSwitchRole: (role: Role) => void;
@@ -134,9 +135,13 @@ export const AmbulanceDriverView: React.FC<AmbulanceDriverViewProps> = ({
     );
   };
 
-  // Initial GPS attempt on load
+  // Initial GPS attempt and permission request on load
   useEffect(() => {
-    handleDetectGPS();
+    NotificationService.requestAllPermissions().then(() => {
+      handleDetectGPS();
+    }).catch(() => {
+      handleDetectGPS();
+    });
   }, []);
 
   // Handle hospital search debounced

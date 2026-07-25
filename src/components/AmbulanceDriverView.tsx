@@ -32,7 +32,7 @@ export const AmbulanceDriverView: React.FC<AmbulanceDriverViewProps> = ({
   userSession,
   onLogout
 }) => {
-  const [vehicleId, setVehicleId] = useState(userSession?.vehicleId || "KA-05-EM-108");
+  const [vehicleId, setVehicleId] = useState(userSession?.vehicleId || "");
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<HospitalResult[]>([]);
   const [selectedHospital, setSelectedHospital] = useState<HospitalResult | null>(null);
@@ -64,28 +64,40 @@ export const AmbulanceDriverView: React.FC<AmbulanceDriverViewProps> = ({
     (e) => e.vehicleId === vehicleId && e.status !== "completed"
   );
 
-  // Synchronize state with active emergency so route and destination remain visible until completed
+  const prevStatusRef = useRef<string | undefined>(activeEmergency?.status);
+
+  // Notify ambulance driver when traffic police acknowledges signal priority
   useEffect(() => {
-    if (activeEmergency) {
-      if (!selectedHospital && activeEmergency.destinationLat && activeEmergency.destinationLng) {
-        setSelectedHospital({
-          name: activeEmergency.destinationName,
-          address: activeEmergency.destinationAddress || activeEmergency.destinationName,
-          lat: activeEmergency.destinationLat,
-          lng: activeEmergency.destinationLng
-        });
-      }
-      if (activeEmergency.routeGeometry && activeEmergency.routeGeometry.length > 0 && routeGeometry.length === 0) {
-        setRouteGeometry(activeEmergency.routeGeometry);
-      }
-      if (etaMinutes === null && activeEmergency.etaMinutes !== undefined) {
-        setEtaMinutes(activeEmergency.etaMinutes);
-      }
-      if (distanceKm === null && activeEmergency.distanceKm !== undefined) {
-        setDistanceKm(activeEmergency.distanceKm);
+    if (activeEmergency?.status === "acknowledged" && prevStatusRef.current !== "acknowledged") {
+      NotificationService.sendNotification(
+        "🟢 SIGNAL PRIORITY ACKNOWLEDGED",
+        `Traffic police acknowledged green corridor for ${activeEmergency.vehicleId} to ${activeEmergency.destinationName}.`
+      );
+      setToastMessage("POLICE ACKNOWLEDGED GREEN CORRIDOR 🟢");
+      setToastSubtext("Traffic Police HQ acknowledged your emergency dispatch. Signal pre-cleared!");
+      setShowToast(true);
+
+      // Play chime
+      try {
+        const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = "sine";
+        osc.frequency.setValueAtTime(523.25, audioCtx.currentTime);
+        osc.frequency.setValueAtTime(659.25, audioCtx.currentTime + 0.15);
+        osc.frequency.setValueAtTime(783.99, audioCtx.currentTime + 0.3);
+        gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.5);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.5);
+      } catch (e) {
+        console.warn("Audio chime playback notice:", e);
       }
     }
-  }, [activeEmergency]);
+    prevStatusRef.current = activeEmergency?.status;
+  }, [activeEmergency?.status]);
 
   // Auto-detect when destination location is reached (< 80m distance)
   useEffect(() => {
@@ -382,29 +394,52 @@ export const AmbulanceDriverView: React.FC<AmbulanceDriverViewProps> = ({
       <main className="w-full max-w-2xl px-4 mt-6 flex flex-col gap-6">
         {/* Active Emergency Banner */}
         {activeEmergency && (
-          <div className="bg-red-600 text-white p-4 sm:p-5 rounded-2xl shadow-lg border border-red-700 flex flex-col gap-3 animate-in fade-in duration-300">
+          <div className={`p-4 sm:p-5 rounded-2xl shadow-lg border flex flex-col gap-3 transition-all duration-300 ${
+            activeEmergency.status === "acknowledged"
+              ? "bg-emerald-900 text-white border-emerald-700"
+              : "bg-red-600 text-white border-red-700"
+          }`}>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className="p-2.5 bg-white/20 rounded-xl animate-pulse shrink-0">
-                  <Siren className="w-6 h-6 text-white" />
+                <div className={`p-2.5 rounded-xl shrink-0 ${
+                  activeEmergency.status === "acknowledged" ? "bg-emerald-500/30 text-emerald-300" : "bg-white/20 text-white animate-pulse"
+                }`}>
+                  <Siren className="w-6 h-6" />
                 </div>
                 <div>
-                  <h3 className="font-extrabold text-sm tracking-wide uppercase flex items-center gap-2">
-                    EMERGENCY ROUTE ACTIVE • {activeEmergency.vehicleId}
-                  </h3>
-                  <p className="text-xs text-red-100 mt-0.5">
-                    Broadcasting live location & corridor to all Traffic Police
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h3 className="font-extrabold text-sm tracking-wide uppercase">
+                      EMERGENCY ROUTE ACTIVE • {activeEmergency.vehicleId}
+                    </h3>
+                    {activeEmergency.status === "acknowledged" ? (
+                      <span className="bg-emerald-400 text-slate-950 font-black text-[10px] px-2.5 py-0.5 rounded-full flex items-center gap-1 uppercase">
+                        <CheckCircle className="w-3 h-3" /> Police Acknowledged
+                      </span>
+                    ) : (
+                      <span className="bg-amber-400 text-slate-950 font-black text-[10px] px-2.5 py-0.5 rounded-full uppercase">
+                        ⏳ Dispatch Sent
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-slate-200 mt-1 font-medium">
+                    {activeEmergency.status === "acknowledged"
+                      ? "🟢 Traffic Police HQ acknowledged your dispatch. Signals along route are pre-cleared!"
+                      : "Broadcasting live location & corridor to Traffic Police HQ..."}
                   </p>
                 </div>
               </div>
             </div>
 
-            <div className="flex items-center justify-end pt-2 border-t border-red-500/80 flex-wrap gap-2">
+            <div className="flex items-center justify-between pt-2 border-t border-white/20 flex-wrap gap-2">
+              <span className="text-xs font-mono font-semibold text-slate-200">
+                Destination: {activeEmergency.destinationName}
+              </span>
               <button
                 onClick={handleCompleteTrip}
-                className="bg-white text-red-600 font-extrabold text-xs px-4 py-2 rounded-xl shadow-xs hover:bg-red-50 transition-colors cursor-pointer shrink-0"
+                className="bg-white text-slate-950 hover:bg-slate-100 font-extrabold text-xs px-4 py-2 rounded-xl shadow-xs transition-colors cursor-pointer shrink-0"
+                id="btn-complete-trip"
               >
-                Complete Trip
+                ✓ Complete Trip
               </button>
             </div>
           </div>

@@ -4,6 +4,7 @@ import { realtimeService } from "./services/realtime";
 import { RoleSelector } from "./components/RoleSelector";
 import { AmbulanceDriverView } from "./components/AmbulanceDriverView";
 import { TrafficPoliceView } from "./components/TrafficPoliceView";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 import { auth, signOutUser } from "./lib/firebase";
 
 export default function App() {
@@ -53,36 +54,38 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 font-sans antialiased">
-      {role === "select" || !session ? (
-        <RoleSelector onLogin={handleLogin} />
-      ) : role === "driver" ? (
-        <AmbulanceDriverView
-          userSession={session}
-          onLogout={handleLogout}
-          onSwitchRole={(r) => {
-            if (r === "select") {
-              handleLogout();
-            } else {
-              setRole(r);
-            }
-          }}
-          activeEmergencies={emergencies}
-        />
-      ) : (
-        <TrafficPoliceView
-          userSession={session}
-          onLogout={handleLogout}
-          onSwitchRole={(r) => {
-            if (r === "select") {
-              handleLogout();
-            } else {
-              setRole(r);
-            }
-          }}
-          emergencies={emergencies}
-        />
-      )}
-    </div>
+    <ErrorBoundary>
+      <div className="min-h-screen bg-slate-50 text-slate-900 font-sans antialiased">
+        {role === "select" || !session ? (
+          <RoleSelector onLogin={handleLogin} />
+        ) : role === "driver" ? (
+          <AmbulanceDriverView
+            userSession={session}
+            onLogout={handleLogout}
+            onSwitchRole={(r) => {
+              if (r === "select") {
+                handleLogout();
+              } else {
+                setRole(r);
+              }
+            }}
+            activeEmergencies={emergencies}
+          />
+        ) : (
+          <TrafficPoliceView
+            userSession={session}
+            onLogout={handleLogout}
+            onSwitchRole={(r) => {
+              if (r === "select") {
+                handleLogout();
+              } else {
+                setRole(r);
+              }
+            }}
+            emergencies={emergencies}
+          />
+        )}
+      </div>
+    </ErrorBoundary>
   );
 }

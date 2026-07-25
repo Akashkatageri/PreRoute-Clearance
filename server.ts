@@ -68,7 +68,7 @@ app.post("/api/emergencies", (req, res) => {
 
   const newEmergency: Emergency = {
     id,
-    vehicleId: vehicleId || "AMB-7",
+    vehicleId: vehicleId || "AMBULANCE",
     destinationName: destinationName || "Hospital",
     destinationAddress: destinationAddress || "Bengaluru",
     destinationLat: destinationLat || 12.8715,
@@ -116,24 +116,8 @@ app.put("/api/emergencies/:id/status", (req, res) => {
   const { status } = req.body;
 
   if (!emergencies[id]) {
-    emergencies[id] = {
-      id,
-      vehicleId: "EMG-VEHICLE",
-      destinationName: "Hospital",
-      destinationAddress: "Bengaluru",
-      destinationLat: 12.8715,
-      destinationLng: 77.5385,
-      startLat: 12.8620,
-      startLng: 77.5280,
-      currentLat: 12.8620,
-      currentLng: 77.5280,
-      priority: "critical",
-      status: status || "active",
-      etaMinutes: 3,
-      distanceKm: 3.1,
-      createdAt: new Date().toLocaleTimeString(),
-      lastUpdated: new Date().toISOString()
-    };
+    res.status(404).json({ error: "Emergency not found" });
+    return;
   } else {
     emergencies[id].status = status;
     emergencies[id].lastUpdated = new Date().toISOString();

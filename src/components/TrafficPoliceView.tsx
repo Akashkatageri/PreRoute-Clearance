@@ -22,8 +22,29 @@ export const TrafficPoliceView: React.FC<TrafficPoliceViewProps> = ({
   const seenEmergenciesRef = useRef<Set<string>>(new Set());
   const isInitialLoadRef = useRef(true);
 
-  // Active non-completed emergencies
-  const activeList = emergencies.filter((e) => e.status !== "completed");
+  // Active non-completed and non-cleared emergencies with guaranteed field fallbacks
+  const activeList = emergencies
+    .filter((e) => e && e.status !== "completed" && e.status !== "cleared")
+    .map((e) => {
+      const vId = (e.vehicleId && e.vehicleId.trim()) || "AMBULANCE-108";
+      const dName = (e.destinationName && e.destinationName.trim()) || "General Hospital";
+      const dAddr = (e.destinationAddress && e.destinationAddress.trim()) || dName;
+      const eta = typeof e.etaMinutes === "number" && !isNaN(e.etaMinutes) && e.etaMinutes >= 0 ? e.etaMinutes : 3;
+      const dist = typeof e.distanceKm === "number" && !isNaN(e.distanceKm) && e.distanceKm >= 0 ? e.distanceKm : 2.5;
+      const created = (e.createdAt && e.createdAt.trim()) || "Just now";
+      const prio = e.priority || "critical";
+
+      return {
+        ...e,
+        vehicleId: vId,
+        destinationName: dName,
+        destinationAddress: dAddr,
+        etaMinutes: eta,
+        distanceKm: dist,
+        createdAt: created,
+        priority: prio
+      };
+    });
 
   // Request all mobile permissions (Location & Push Notifications) on mount
   useEffect(() => {
@@ -45,19 +66,27 @@ export const TrafficPoliceView: React.FC<TrafficPoliceViewProps> = ({
   useEffect(() => {
     // Populate seen set on initial load without firing alerts for old historical records
     if (isInitialLoadRef.current) {
-      emergencies.forEach((emg) => seenEmergenciesRef.current.add(emg.id));
+      emergencies.forEach((emg) => {
+        if (emg && emg.id) {
+          seenEmergenciesRef.current.add(emg.id);
+        }
+      });
       isInitialLoadRef.current = false;
       return;
     }
 
     emergencies.forEach((emg) => {
-      if (emg.status !== "completed" && !seenEmergenciesRef.current.has(emg.id)) {
+      if (emg && emg.status !== "completed" && !seenEmergenciesRef.current.has(emg.id)) {
         seenEmergenciesRef.current.add(emg.id);
+
+        const vehicle = emg.vehicleId || "Ambulance";
+        const dest = emg.destinationName || "Hospital";
+        const eta = emg.etaMinutes || 0;
 
         // Send native Capacitor Local Notification (Android notification tray & banner) + Web Notification
         NotificationService.sendNotification(
-          `🚨 EMERGENCY DISPATCH: ${emg.vehicleId}`,
-          `Heading to ${emg.destinationName}. Priority: ${emg.priority.toUpperCase()}. ETA: ${emg.etaMinutes}m.`
+          `🚨 EMERGENCY DISPATCH: ${vehicle}`,
+          `Heading to ${dest}. ETA: ${eta}m.`
         );
 
         // Audio siren chime
@@ -85,13 +114,11 @@ export const TrafficPoliceView: React.FC<TrafficPoliceViewProps> = ({
 
   const handleAcknowledge = async () => {
     if (selectedEmergency) {
-      await realtimeService.updateStatus(selectedEmergency.id, "acknowledged");
-    }
-  };
-
-  const handleMarkCleared = async () => {
-    if (selectedEmergency) {
-      await realtimeService.updateStatus(selectedEmergency.id, "cleared");
+      try {
+        await realtimeService.updateStatus(selectedEmergency.id, "acknowledged");
+      } catch (e) {
+        console.warn("Acknowledge error:", e);
+      }
     }
   };
 
@@ -142,11 +169,11 @@ export const TrafficPoliceView: React.FC<TrafficPoliceViewProps> = ({
             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider pr-1">
               Vehicles ({activeList.length}):
             </span>
-            {activeList.map((emg) => {
+            {activeList.map((emg, idx) => {
               const isSelected = selectedEmergency?.id === emg.id;
               return (
                 <button
-                  key={emg.id}
+                  key={emg.id || `emg-bar-${idx}`}
                   onClick={() => setSelectedId(emg.id)}
                   className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer border ${
                     isSelected
@@ -184,11 +211,11 @@ export const TrafficPoliceView: React.FC<TrafficPoliceViewProps> = ({
             </div>
           ) : (
             <div className="flex flex-col gap-3">
-              {activeList.map((emg) => {
+              {activeList.map((emg, idx) => {
                 const isSelected = selectedEmergency?.id === emg.id;
                 return (
                   <button
-                    key={emg.id}
+                    key={emg.id || `emg-sidebar-${idx}`}
                     onClick={() => setSelectedId(emg.id)}
                     className={`w-full text-left p-4 rounded-2xl border transition-all cursor-pointer flex flex-col gap-2 ${
                       isSelected
@@ -205,7 +232,7 @@ export const TrafficPoliceView: React.FC<TrafficPoliceViewProps> = ({
                           {emg.vehicleId}
                         </span>
                         <span className="bg-red-500 text-white text-[10px] font-extrabold px-2 py-0.5 rounded-md uppercase shrink-0">
-                          {emg.priority}
+                          {emg.priority || "critical"}
                         </span>
                       </div>
                       <span className="bg-red-50 text-red-600 font-black text-xs px-2.5 py-1 rounded-lg shrink-0">
@@ -239,7 +266,7 @@ export const TrafficPoliceView: React.FC<TrafficPoliceViewProps> = ({
                         EMERGENCY ACTIVE
                       </h2>
                       <span className="bg-red-500 text-white text-[10px] font-extrabold px-2.5 py-0.5 rounded-md uppercase">
-                        {selectedEmergency.priority}
+                        {selectedEmergency.priority || "critical"}
                       </span>
                     </div>
 
@@ -267,40 +294,28 @@ export const TrafficPoliceView: React.FC<TrafficPoliceViewProps> = ({
                   </div>
                 </div>
 
-                {/* Primary Action Buttons: Acknowledge & Mark Cleared */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-2 border-t border-slate-800/80">
+                {/* Primary Action Button: Acknowledge Signal Priority */}
+                <div className="pt-2 border-t border-slate-800/80">
                   <button
                     onClick={handleAcknowledge}
-                    className={`min-h-[48px] py-3 px-4 rounded-xl font-extrabold text-sm sm:text-base transition-all flex items-center justify-center gap-2 cursor-pointer shadow-md ${
-                      selectedEmergency.status === "acknowledged" || selectedEmergency.status === "cleared"
-                        ? "bg-amber-500 text-slate-950 hover:bg-amber-400 ring-2 ring-amber-300/50"
+                    className={`w-full min-h-[48px] py-3 px-4 rounded-xl font-extrabold text-sm sm:text-base transition-all flex items-center justify-center gap-2 cursor-pointer shadow-md ${
+                      selectedEmergency.status === "acknowledged"
+                        ? "bg-emerald-500 text-slate-950 hover:bg-emerald-400 ring-2 ring-emerald-300/50"
                         : "bg-amber-400 hover:bg-amber-500 text-slate-950 active:scale-[0.98]"
                     }`}
                     id="btn-police-acknowledge"
                   >
-                    <span className="text-base">🖐️</span>
-                    <span>
-                      {selectedEmergency.status === "acknowledged" || selectedEmergency.status === "cleared"
-                        ? "✓ Acknowledged"
-                        : "Acknowledge Signal"}
-                    </span>
-                  </button>
-
-                  <button
-                    onClick={handleMarkCleared}
-                    className={`min-h-[48px] py-3 px-4 rounded-xl font-extrabold text-sm sm:text-base transition-all flex items-center justify-center gap-2 cursor-pointer shadow-md ${
-                      selectedEmergency.status === "cleared"
-                        ? "bg-emerald-600 text-white hover:bg-emerald-500 ring-2 ring-emerald-400/50"
-                        : "bg-emerald-500 hover:bg-emerald-600 text-white active:scale-[0.98]"
-                    }`}
-                    id="btn-police-mark-cleared"
-                  >
-                    <CheckCircle className="w-5 h-5 text-white" />
-                    <span>
-                      {selectedEmergency.status === "cleared"
-                        ? "✓ Route Cleared"
-                        : "Mark Route Cleared"}
-                    </span>
+                    {selectedEmergency.status === "acknowledged" ? (
+                      <>
+                        <CheckCircle className="w-5 h-5 text-slate-950" />
+                        <span>✓ Signal Priority Acknowledged</span>
+                      </>
+                    ) : (
+                      <>
+                        <span className="text-base">🖐️</span>
+                        <span>Acknowledge Signal & Pre-clear Route</span>
+                      </>
+                    )}
                   </button>
                 </div>
               </div>
@@ -344,7 +359,7 @@ export const TrafficPoliceView: React.FC<TrafficPoliceViewProps> = ({
                       PRIORITY
                     </span>
                     <span className="text-base sm:text-2xl font-black text-red-600 uppercase leading-tight truncate">
-                      {selectedEmergency.priority}
+                      {selectedEmergency.priority || "critical"}
                     </span>
                   </div>
                 </div>

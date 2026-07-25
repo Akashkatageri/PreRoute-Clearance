@@ -23,7 +23,19 @@ class RealtimeSyncService {
       onSnapshot(emergenciesCol, (snapshot) => {
         const firestoreList: Emergency[] = [];
         snapshot.forEach((docSnap) => {
-          firestoreList.push(docSnap.data() as Emergency);
+          const raw = docSnap.data() as Emergency;
+          if (raw && raw.id) {
+            firestoreList.push({
+              ...raw,
+              vehicleId: (raw.vehicleId && raw.vehicleId.trim()) || "AMBULANCE-108",
+              destinationName: (raw.destinationName && raw.destinationName.trim()) || "General Hospital",
+              destinationAddress: (raw.destinationAddress && raw.destinationAddress.trim()) || raw.destinationName || "General Hospital",
+              etaMinutes: typeof raw.etaMinutes === "number" && !isNaN(raw.etaMinutes) && raw.etaMinutes >= 0 ? raw.etaMinutes : 3,
+              distanceKm: typeof raw.distanceKm === "number" && !isNaN(raw.distanceKm) && raw.distanceKm >= 0 ? raw.distanceKm : 2.5,
+              createdAt: (raw.createdAt && raw.createdAt.trim()) || "Just now",
+              priority: raw.priority || "critical"
+            });
+          }
         });
 
         if (firestoreList.length > 0) {
@@ -116,7 +128,7 @@ class RealtimeSyncService {
 
     const fallbackEmergency: Emergency = {
       id,
-      vehicleId: emergencyData.vehicleId || "KA-05-EM-108",
+      vehicleId: emergencyData.vehicleId || "AMBULANCE",
       destinationName: emergencyData.destinationName || "Hospital",
       destinationAddress: emergencyData.destinationAddress || "Hospital Address",
       destinationLat: emergencyData.destinationLat || 12.8715,

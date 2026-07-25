@@ -54,6 +54,10 @@ function MultiRouteFitter({ geometries }: { geometries: [number, number][][] }) 
   return null;
 }
 
+function isValidCoord(num: any): num is number {
+  return typeof num === "number" && !isNaN(num) && isFinite(num) && num !== 0;
+}
+
 export function Map({
   currentPos,
   destinationPos,
@@ -64,11 +68,15 @@ export function Map({
   selectedEmergencyId,
   onSelectEmergency
 }: MapProps) {
-  const center: [number, number] = currentPos || [12.8620, 77.5280];
+  const defaultCenter: [number, number] = [12.8620, 77.5280];
+  const center: [number, number] = 
+    currentPos && isValidCoord(currentPos[0]) && isValidCoord(currentPos[1])
+      ? currentPos
+      : defaultCenter;
 
   // Other active emergencies excluding currently selected focused route
   const otherActiveEmergencies = allEmergencies.filter(
-    (e) => e.status !== "completed" && e.id !== selectedEmergencyId
+    (e) => e && e.status !== "completed" && e.id !== selectedEmergencyId
   );
 
   const allGeometriesToFit = [
@@ -92,10 +100,10 @@ export function Map({
         />
 
         {/* Real-time GPS accuracy circle around primary ambulance */}
-        {currentPos && (
+        {currentPos && isValidCoord(currentPos[0]) && isValidCoord(currentPos[1]) && (
           <Circle
             center={currentPos}
-            radius={gpsAccuracyMeters}
+            radius={gpsAccuracyMeters || 15}
             pathOptions={{
               color: "#3b82f6",
               fillColor: "#60a5fa",
@@ -107,12 +115,17 @@ export function Map({
         )}
 
         {/* Other Active Emergencies (Multiple Ambulance Routes on Radar) */}
-        {otherActiveEmergencies.map((emg) => {
+        {otherActiveEmergencies.map((emg, idx) => {
+          const emgKey = emg.id || `emg-${idx}`;
+          const hasCurrent = isValidCoord(emg.currentLat) && isValidCoord(emg.currentLng);
+          const hasDest = isValidCoord(emg.destinationLat) && isValidCoord(emg.destinationLng);
+          if (!hasCurrent) return null;
+
           const emgCurrentPos: [number, number] = [emg.currentLat, emg.currentLng];
-          const emgDestPos: [number, number] = [emg.destinationLat, emg.destinationLng];
+          const emgDestPos: [number, number] | null = hasDest ? [emg.destinationLat, emg.destinationLng] : null;
 
           return (
-            <React.Fragment key={emg.id}>
+            <React.Fragment key={emgKey}>
               {/* Secondary Active Route Line */}
               {emg.routeGeometry && emg.routeGeometry.length > 0 && (
                 <>
@@ -178,7 +191,7 @@ export function Map({
         })}
 
         {/* Primary Emergency Vehicle Marker */}
-        {currentPos && (
+        {currentPos && isValidCoord(currentPos[0]) && isValidCoord(currentPos[1]) && (
           <>
             <Marker position={currentPos} icon={ambulanceIcon}>
               <Popup>
@@ -194,7 +207,7 @@ export function Map({
         )}
 
         {/* Primary Destination Hospital Marker */}
-        {destinationPos && (
+        {destinationPos && isValidCoord(destinationPos[0]) && isValidCoord(destinationPos[1]) && (
           <Marker position={destinationPos} icon={hospitalIcon}>
             <Popup>
               <div className="text-xs font-sans">
@@ -265,8 +278,12 @@ export const MapView: React.FC<MapViewProps> = ({
   selectedEmergencyId,
   onSelectEmergency
 }) => {
-  const currentPos: [number, number] = [currentLat ?? startLat, currentLng ?? startLng];
-  const destinationPos: [number, number] | null = (destLat && destLng) ? [destLat, destLng] : null;
+  const cLat = isValidCoord(currentLat) ? currentLat : (isValidCoord(startLat) ? startLat : 12.8620);
+  const cLng = isValidCoord(currentLng) ? currentLng : (isValidCoord(startLng) ? startLng : 77.5280);
+  const currentPos: [number, number] = [cLat, cLng];
+
+  const destinationPos: [number, number] | null =
+    isValidCoord(destLat) && isValidCoord(destLng) ? [destLat, destLng] : null;
 
   return (
     <Map

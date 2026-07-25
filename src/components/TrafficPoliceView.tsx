@@ -26,8 +26,8 @@ export const TrafficPoliceView: React.FC<TrafficPoliceViewProps> = ({
   const activeList = emergencies
     .filter((e) => e && e.status !== "completed" && e.status !== "cleared")
     .map((e) => {
-      const vId = (e.vehicleId && e.vehicleId.trim()) || "AMBULANCE-108";
-      const dName = (e.destinationName && e.destinationName.trim()) || "General Hospital";
+      const vId = (e.vehicleId && e.vehicleId.trim()) || e.id || "AMBULANCE";
+      const dName = (e.destinationName && e.destinationName.trim()) || "Hospital";
       const dAddr = (e.destinationAddress && e.destinationAddress.trim()) || dName;
       const eta = typeof e.etaMinutes === "number" && !isNaN(e.etaMinutes) && e.etaMinutes >= 0 ? e.etaMinutes : 3;
       const dist = typeof e.distanceKm === "number" && !isNaN(e.distanceKm) && e.distanceKm >= 0 ? e.distanceKm : 2.5;

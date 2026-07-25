@@ -33,7 +33,7 @@ export const RoleSelector: React.FC<RoleSelectorProps> = ({ onLogin }) => {
 
     let profile: any = null;
     // 1. Check LocalStorage
-    const localData = localStorage.getItem(localKey);
+    const localData = localStorage.getItem(localKey) || localStorage.getItem("ambulance_preclear_last_credentials");
     if (localData) {
       try {
         profile = JSON.parse(localData);
@@ -50,6 +50,7 @@ export const RoleSelector: React.FC<RoleSelectorProps> = ({ onLogin }) => {
         const remoteData = userSnap.data();
         profile = { ...profile, ...remoteData };
         localStorage.setItem(localKey, JSON.stringify(profile));
+        localStorage.setItem("ambulance_preclear_last_credentials", JSON.stringify(profile));
       }
     } catch (e) {
       console.warn("Could not fetch remote user profile from Firestore:", e);
@@ -61,7 +62,7 @@ export const RoleSelector: React.FC<RoleSelectorProps> = ({ onLogin }) => {
   // Helper to apply user profile data to form state
   const applyGoogleUserAndProfile = async (user: any) => {
     const profile = {
-      name: user.displayName || (selectedRole === "driver" ? "Ambulance Pilot" : "Traffic Officer"),
+      name: user.displayName || officerName || (selectedRole === "driver" ? "Ambulance Pilot" : "Traffic Officer"),
       email: user.email || `${selectedRole}@preclear.gov.in`,
       avatarUrl: user.photoURL || `https://api.dicebear.com/7.x/bottts/svg?seed=${user.uid}`
     };
@@ -75,8 +76,8 @@ export const RoleSelector: React.FC<RoleSelectorProps> = ({ onLogin }) => {
         if (savedProfile.role === "driver" || savedProfile.role === "police") {
           setSelectedRole(savedProfile.role);
         }
-        if (savedProfile.name) {
-          setOfficerName(savedProfile.name);
+        if (savedProfile.name || savedProfile.officerName) {
+          setOfficerName(savedProfile.name || savedProfile.officerName);
         }
         if (savedProfile.vehicleId) {
           setVehicleId(savedProfile.vehicleId);
@@ -85,11 +86,35 @@ export const RoleSelector: React.FC<RoleSelectorProps> = ({ onLogin }) => {
           setBadgeNumber(savedProfile.badgeNumber);
         }
       } else {
-        setIsProfileRestored(false);
         if (user.displayName && !officerName) setOfficerName(user.displayName);
       }
     }
   };
+
+  // Pre-fill initial saved credentials on mount so user sees them immediately in Android/Web
+  useEffect(() => {
+    try {
+      const savedRaw = localStorage.getItem("ambulance_preclear_last_credentials") || localStorage.getItem("ambulance_preclear_session");
+      if (savedRaw) {
+        const saved = JSON.parse(savedRaw);
+        if (saved.name || saved.officerName) {
+          setOfficerName(saved.name || saved.officerName || "");
+        }
+        if (saved.vehicleId) {
+          setVehicleId(saved.vehicleId);
+        }
+        if (saved.badgeNumber) {
+          setBadgeNumber(saved.badgeNumber);
+        }
+        if (saved.role === "driver" || saved.role === "police") {
+          setSelectedRole(saved.role);
+        }
+        setIsProfileRestored(true);
+      }
+    } catch (e) {
+      console.warn("Could not load initial saved credentials:", e);
+    }
+  }, []);
 
   // Listen to Firebase Auth state changes
   useEffect(() => {
@@ -98,7 +123,6 @@ export const RoleSelector: React.FC<RoleSelectorProps> = ({ onLogin }) => {
         await applyGoogleUserAndProfile(user);
       } else {
         setGoogleAccount(null);
-        setIsProfileRestored(false);
       }
     });
 
@@ -160,26 +184,25 @@ export const RoleSelector: React.FC<RoleSelectorProps> = ({ onLogin }) => {
       loggedAt: new Date().toISOString()
     };
 
-    // Save profile to localStorage and Firestore linked to this Google account
-    if (googleAccount?.email) {
-      const normalizedEmail = googleAccount.email.toLowerCase();
-      const profileToSave = {
-        email: normalizedEmail,
-        name,
-        avatarUrl,
-        role: selectedRole,
-        vehicleId: selectedRole === "driver" ? vehicleId.trim() : undefined,
-        badgeNumber: selectedRole === "police" ? badgeNumber.trim() : undefined,
-        updatedAt: new Date().toISOString()
-      };
+    const normalizedEmail = (googleAccount?.email || `${selectedRole}_user@preclear.gov.in`).toLowerCase();
+    const profileToSave = {
+      email: normalizedEmail,
+      name,
+      avatarUrl,
+      role: selectedRole,
+      vehicleId: selectedRole === "driver" ? vehicleId.trim() : undefined,
+      badgeNumber: selectedRole === "police" ? badgeNumber.trim() : undefined,
+      updatedAt: new Date().toISOString()
+    };
 
-      localStorage.setItem(`preroute_profile_${normalizedEmail}`, JSON.stringify(profileToSave));
+    // Save profile to localStorage and Firestore
+    localStorage.setItem("ambulance_preclear_last_credentials", JSON.stringify(profileToSave));
+    localStorage.setItem(`preroute_profile_${normalizedEmail}`, JSON.stringify(profileToSave));
 
-      try {
-        await setDoc(doc(db, "users", normalizedEmail), profileToSave);
-      } catch (err) {
-        console.warn("Could not save user profile to Firestore:", err);
-      }
+    try {
+      await setDoc(doc(db, "users", normalizedEmail), profileToSave);
+    } catch (err) {
+      console.warn("Could not save user profile to Firestore:", err);
     }
 
     // Save active session
@@ -330,17 +353,17 @@ export const RoleSelector: React.FC<RoleSelectorProps> = ({ onLogin }) => {
           </div>
 
           {/* STEP 2: Portal Credentials Section */}
-          <div className={`flex flex-col gap-5 transition-all duration-300 ${!googleAccount ? "opacity-40 pointer-events-none select-none filter blur-[0.5px]" : ""}`}>
+          <div className="flex flex-col gap-5 transition-all duration-300">
             <label className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
               <span className="w-5 h-5 rounded-full bg-blue-600 text-white flex items-center justify-center text-[10px] font-black">2</span>
               Portal Role & Vehicle Credentials
             </label>
 
-            {isProfileRestored && googleAccount && (
+            {isProfileRestored && (
               <div className="bg-emerald-500/10 border border-emerald-500/30 p-3 rounded-2xl text-emerald-300 text-xs flex items-center justify-between gap-2.5">
                 <div className="flex items-center gap-2 min-w-0">
-                  <Lock className="w-4 h-4 text-emerald-400 shrink-0" />
-                  <span className="truncate">Saved credentials locked to <strong>{googleAccount.email}</strong>.</span>
+                  <UserCheck className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <span className="truncate">Saved credentials restored ({selectedRole === "driver" ? vehicleId || "Ambulance" : badgeNumber || "Police"}).</span>
                 </div>
                 {!isEditingProfile ? (
                   <button
@@ -439,7 +462,7 @@ export const RoleSelector: React.FC<RoleSelectorProps> = ({ onLogin }) => {
                 className={`w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-blue-500 ${
                   isLocked ? "bg-slate-950/80 cursor-not-allowed text-slate-300" : ""
                 }`}
-                disabled={!googleAccount || isLocked}
+                disabled={isLocked}
                 readOnly={isLocked}
               />
             </div>
@@ -480,7 +503,7 @@ export const RoleSelector: React.FC<RoleSelectorProps> = ({ onLogin }) => {
                         : "border-amber-500/80 focus:border-amber-400"
                       : "border-slate-800 focus:border-blue-500"
                   }`}
-                  disabled={!googleAccount || isLocked}
+                  disabled={isLocked}
                   readOnly={isLocked}
                   required
                 />
@@ -506,7 +529,7 @@ export const RoleSelector: React.FC<RoleSelectorProps> = ({ onLogin }) => {
                   className={`w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-red-500 font-mono ${
                     isLocked ? "bg-slate-950/80 cursor-not-allowed text-slate-300" : ""
                   }`}
-                  disabled={!googleAccount || isLocked}
+                  disabled={isLocked}
                   readOnly={isLocked}
                   required
                 />

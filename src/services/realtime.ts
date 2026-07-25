@@ -26,8 +26,8 @@ class RealtimeSyncService {
           if (docId) {
             const emergencyItem: Emergency = {
               id: docId,
-              vehicleId: (raw.vehicleId && raw.vehicleId.trim()) || "AMBULANCE-108",
-              destinationName: (raw.destinationName && raw.destinationName.trim()) || "General Hospital",
+              vehicleId: (raw.vehicleId && raw.vehicleId.trim()) || docId || "AMBULANCE",
+              destinationName: (raw.destinationName && raw.destinationName.trim()) || "Hospital",
               destinationAddress: (raw.destinationAddress && raw.destinationAddress.trim()) || raw.destinationName || "General Hospital",
               destinationLat: typeof raw.destinationLat === "number" ? raw.destinationLat : 12.8715,
               destinationLng: typeof raw.destinationLng === "number" ? raw.destinationLng : 77.5385,

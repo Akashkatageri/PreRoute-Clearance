@@ -98,8 +98,8 @@ app.put("/api/emergencies/:id/location", (req, res) => {
   if (!emergencies[id]) {
     emergencies[id] = {
       id,
-      vehicleId: "AMBULANCE-108",
-      destinationName: "General Hospital",
+      vehicleId: req.body.vehicleId || "AMBULANCE",
+      destinationName: req.body.destinationName || "Hospital",
       destinationAddress: "Bengaluru",
       destinationLat: 12.8715,
       destinationLng: 77.5385,
@@ -135,8 +135,8 @@ app.put("/api/emergencies/:id/status", (req, res) => {
   if (!emergencies[id]) {
     emergencies[id] = {
       id,
-      vehicleId: "AMBULANCE-108",
-      destinationName: "General Hospital",
+      vehicleId: req.body.vehicleId || "AMBULANCE",
+      destinationName: req.body.destinationName || "Hospital",
       destinationAddress: "Bengaluru",
       destinationLat: 12.8715,
       destinationLng: 77.5385,

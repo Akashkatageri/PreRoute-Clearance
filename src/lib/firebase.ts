@@ -16,10 +16,6 @@ const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 
 export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
-// Set prompt to select_account so Google prompts the user to choose their account
-googleProvider.setCustomParameters({
-  prompt: 'select_account'
-});
 
 export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId || "(default)");
 
@@ -30,6 +26,11 @@ export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId || "(defa
  * Fallback to Firebase Web SDK signInWithPopup on desktop/mobile browsers.
  */
 export async function signInWithGoogleNativeOrWeb(): Promise<User> {
+  // If user is already authenticated in Firebase, reuse existing active session without showing prompt
+  if (auth.currentUser) {
+    return auth.currentUser;
+  }
+
   const isPluginAvailable =
     Capacitor.isNativePlatform() &&
     Capacitor.isPluginAvailable('FirebaseAuthentication');

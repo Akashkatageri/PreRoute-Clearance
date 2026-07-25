@@ -99,7 +99,54 @@ export const AmbulanceDriverView: React.FC<AmbulanceDriverViewProps> = ({
     prevStatusRef.current = activeEmergency?.status;
   }, [activeEmergency?.status]);
 
-  // Auto-detect when destination location is reached (< 80m distance)
+  // Synchronize state with active emergency so route and destination remain visible even when police acknowledges
+  useEffect(() => {
+    if (activeEmergency) {
+      if (
+        !selectedHospital ||
+        selectedHospital.lat !== activeEmergency.destinationLat ||
+        selectedHospital.lng !== activeEmergency.destinationLng
+      ) {
+        setSelectedHospital({
+          name: activeEmergency.destinationName,
+          address: activeEmergency.destinationAddress || activeEmergency.destinationName,
+          lat: activeEmergency.destinationLat,
+          lng: activeEmergency.destinationLng
+        });
+      }
+
+      if (activeEmergency.routeGeometry && activeEmergency.routeGeometry.length > 0) {
+        if (routeGeometry.length === 0) {
+          setRouteGeometry(activeEmergency.routeGeometry);
+        }
+      } else if (routeGeometry.length === 0 && activeEmergency.destinationLat && activeEmergency.destinationLng) {
+        calculateGeoapifyRoute(
+          currentPos.lat,
+          currentPos.lng,
+          activeEmergency.destinationLat,
+          activeEmergency.destinationLng
+        )
+          .then((res) => {
+            setRouteGeometry(res.geometry);
+            setEtaMinutes(res.etaMinutes);
+            setDistanceKm(res.distanceKm);
+          })
+          .catch((err) => console.warn("Sync route calc error:", err));
+      }
+
+      if (etaMinutes === null && activeEmergency.etaMinutes !== undefined) {
+        setEtaMinutes(activeEmergency.etaMinutes);
+      }
+      if (distanceKm === null && activeEmergency.distanceKm !== undefined) {
+        setDistanceKm(activeEmergency.distanceKm);
+      }
+    }
+  }, [
+    activeEmergency?.id,
+    activeEmergency?.status,
+    activeEmergency?.destinationLat,
+    activeEmergency?.destinationLng
+  ]);
   useEffect(() => {
     if (activeEmergency && activeEmergency.destinationLat && activeEmergency.destinationLng) {
       const distKm = calculateHaversineKm(

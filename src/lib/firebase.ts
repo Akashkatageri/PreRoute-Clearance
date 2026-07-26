@@ -41,24 +41,19 @@ export async function signInWithGoogleNativeOrWeb(): Promise<User> {
 
       let result;
       try {
-        result = await FirebaseAuthentication.signInWithGoogle({
-          scopes: ['profile', 'email']
-        });
+        result = await FirebaseAuthentication.signInWithGoogle();
       } catch (credErr: any) {
         console.warn("Native Google Sign-In primary attempt failed, performing reset & retry:", credErr);
         // Clear lingering native session state before retrying
         await FirebaseAuthentication.signOut().catch(() => {});
         try {
           result = await FirebaseAuthentication.signInWithGoogle({
-            scopes: ['profile', 'email'],
             useCredentialManager: false
           });
         } catch (credErr2: any) {
           console.warn("Native Google Sign-In fallback attempt failed:", credErr2);
           await FirebaseAuthentication.signOut().catch(() => {});
-          result = await FirebaseAuthentication.signInWithGoogle({
-            scopes: ['profile', 'email']
-          });
+          result = await FirebaseAuthentication.signInWithGoogle();
         }
       }
 

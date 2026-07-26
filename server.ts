@@ -18,6 +18,7 @@ interface Emergency {
   etaMinutes: number;
   distanceKm: number;
   createdAt: string;
+  createdTimestamp?: number;
   routeGeometry?: [number, number][];
   lastUpdated: string;
 }
@@ -29,18 +30,23 @@ const PORT = 3000;
 
 // In-memory real-time store for active emergencies
 const emergencies: Record<string, Emergency> = {};
+
 const TWELVE_HOURS_MS = 12 * 60 * 60 * 1000;
 
-function cleanupExpiredEmergencies() {
+function purgeExpiredEmergencies() {
   const now = Date.now();
   for (const id of Object.keys(emergencies)) {
     const emg = emergencies[id];
-    const updatedTime = new Date(emg.lastUpdated || emg.createdAt || "").getTime();
-    if (!isNaN(updatedTime) && now - updatedTime > TWELVE_HOURS_MS) {
+    const createdTime = emg.createdTimestamp || (emg.lastUpdated ? new Date(emg.lastUpdated).getTime() : now);
+    if (now - createdTime > TWELVE_HOURS_MS) {
       delete emergencies[id];
+      broadcastUpdate("EMERGENCY_DELETED", { id });
     }
   }
 }
+
+// Periodic cleanup every minute
+setInterval(purgeExpiredEmergencies, 60000);
 
 const sseClients: express.Response[] = [];
 
@@ -56,16 +62,8 @@ function broadcastUpdate(type: string, data: any) {
 }
 
 app.get("/api/emergencies", (req, res) => {
-  cleanupExpiredEmergencies();
+  purgeExpiredEmergencies();
   res.json(Object.values(emergencies));
-});
-
-app.delete("/api/emergencies/clear", (req, res) => {
-  for (const id of Object.keys(emergencies)) {
-    delete emergencies[id];
-  }
-  broadcastUpdate("EMERGENCY_CLEARED_ALL", { cleared: true });
-  res.json({ success: true });
 });
 
 app.post("/api/emergencies", (req, res) => {
@@ -103,6 +101,7 @@ app.post("/api/emergencies", (req, res) => {
     etaMinutes: etaMinutes || 3,
     distanceKm: distanceKm || 3.1,
     createdAt: timeStr,
+    createdTimestamp: now.getTime(),
     lastUpdated: now.toISOString(),
     routeGeometry: routeGeometry || []
   };

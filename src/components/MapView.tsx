@@ -19,6 +19,13 @@ const hospitalIcon = new L.Icon({
   className: "shadow-md"
 });
 
+const policeIcon = new L.Icon({
+  iconUrl: "https://img.icons8.com/color/48/police-badge.png",
+  iconSize: [38, 38],
+  iconAnchor: [19, 19],
+  className: "shadow-md"
+});
+
 export interface MapProps {
   currentPos: [number, number] | null;
   destinationPos: [number, number] | null;
@@ -28,6 +35,8 @@ export interface MapProps {
   allEmergencies?: Emergency[];
   selectedEmergencyId?: string;
   onSelectEmergency?: (id: string) => void;
+  isAcknowledged?: boolean;
+  policePos?: [number, number] | null;
 }
 
 function MapUpdater({ center }: { center: [number, number] }) {
@@ -66,27 +75,20 @@ export function Map({
   gpsAccuracyMeters = 15,
   allEmergencies = [],
   selectedEmergencyId,
-  onSelectEmergency
+  onSelectEmergency,
+  isAcknowledged = false,
+  policePos
 }: MapProps) {
   const defaultCenter: [number, number] = [12.8620, 77.5280];
   const center: [number, number] = 
     currentPos && isValidCoord(currentPos[0]) && isValidCoord(currentPos[1])
       ? currentPos
-      : defaultCenter;
+      : (policePos && isValidCoord(policePos[0]) && isValidCoord(policePos[1]) ? policePos : defaultCenter);
 
-  // Other active emergencies created/updated within 12 hours excluding currently selected focused route
-  const TWELVE_HOURS_MS = 12 * 60 * 60 * 1000;
+  // Other active emergencies excluding currently selected focused route
   const otherActiveEmergencies = allEmergencies.filter(
-    (e) => {
-      if (!e || e.status === "completed" || e.id === selectedEmergencyId) return false;
-      const updatedTimeMs = new Date(e.lastUpdated || e.createdAt || "").getTime();
-      if (!isNaN(updatedTimeMs) && Date.now() - updatedTimeMs > TWELVE_HOURS_MS) return false;
-      return true;
-    }
+    (e) => e && e.status !== "completed" && e.id !== selectedEmergencyId
   );
-
-  const selectedEmergency = allEmergencies.find((e) => e && e.id === selectedEmergencyId);
-  const isSelectedAcknowledged = selectedEmergency?.status === "acknowledged" || selectedEmergency?.status === "cleared";
 
   const allGeometriesToFit = [
     ...(routeGeometry && routeGeometry.length > 0 ? [routeGeometry] : []),
@@ -107,6 +109,20 @@ export function Map({
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors, &copy; <a href="https://www.geoapify.com/">Geoapify</a>'
           url={`https://maps.geoapify.com/v1/tile/osm-bright/{z}/{x}/{y}.png?apiKey=${GEOAPIFY_KEY}`}
         />
+
+        {/* Traffic Police Officer Post Marker */}
+        {policePos && isValidCoord(policePos[0]) && isValidCoord(policePos[1]) && (
+          <Marker position={policePos} icon={policeIcon}>
+            <Popup>
+              <div className="text-xs font-sans p-1">
+                <p className="font-black text-emerald-600 uppercase flex items-center gap-1">
+                  👮 TRAFFIC POLICE POST
+                </p>
+                <p className="text-slate-600 text-[11px]">Live Radar Duty Location</p>
+              </div>
+            </Popup>
+          </Marker>
+        )}
 
         {/* Real-time GPS accuracy circle around primary ambulance */}
         {currentPos && isValidCoord(currentPos[0]) && isValidCoord(currentPos[1]) && (
@@ -132,6 +148,7 @@ export function Map({
 
           const emgCurrentPos: [number, number] = [emg.currentLat, emg.currentLng];
           const emgDestPos: [number, number] | null = hasDest ? [emg.destinationLat, emg.destinationLng] : null;
+          const emgIsAck = emg.status === "acknowledged";
 
           return (
             <React.Fragment key={emgKey}>
@@ -146,7 +163,7 @@ export function Map({
                   />
                   <Polyline
                     positions={emg.routeGeometry}
-                    color={emg.status === "acknowledged" || emg.status === "cleared" ? "#10b981" : "#f59e0b"}
+                    color={emgIsAck ? "#10b981" : "#f59e0b"}
                     weight={4}
                     opacity={0.9}
                     dashArray="6, 8"
@@ -167,18 +184,17 @@ export function Map({
               >
                 <Popup>
                   <div className="text-xs font-sans p-1">
-                    <p className="font-black text-amber-600 uppercase flex items-center justify-between gap-2">
-                      <span>🚨 {emg.vehicleId}</span>
-                      {(emg.status === "acknowledged" || emg.status === "cleared") && (
-                        <span className="bg-emerald-500 text-slate-950 text-[9px] font-black px-1.5 py-0.5 rounded">✓ ACK</span>
-                      )}
+                    <p className={`font-black uppercase flex items-center gap-1 ${emgIsAck ? "text-emerald-600" : "text-amber-600"}`}>
+                      🚨 AMBULANCE {emg.vehicleId} {emgIsAck ? "(ACKNOWLEDGED)" : ""}
                     </p>
                     <p className="text-slate-700 font-medium mt-0.5">To: {emg.destinationName}</p>
                     <p className="text-[11px] text-slate-500">ETA: {emg.etaMinutes} min • {emg.distanceKm} km</p>
                     {onSelectEmergency && (
                       <button
                         onClick={() => onSelectEmergency(emg.id)}
-                        className="mt-2 w-full bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-[10px] py-1 px-2 rounded-md transition-colors cursor-pointer"
+                        className={`mt-2 w-full font-bold text-[10px] py-1 px-2 rounded-md transition-colors cursor-pointer ${
+                          emgIsAck ? "bg-emerald-500 hover:bg-emerald-600 text-slate-950" : "bg-amber-500 hover:bg-amber-600 text-slate-950"
+                        }`}
                       >
                         Inspect Route & Clearance
                       </button>
@@ -230,7 +246,7 @@ export function Map({
           </Marker>
         )}
 
-        {/* Primary Emergency Corridor Line */}
+        {/* Primary Emergency Corridor Red/Green Line */}
         {routeGeometry && routeGeometry.length > 0 && (
           <>
             <Polyline
@@ -241,7 +257,7 @@ export function Map({
             />
             <Polyline
               positions={routeGeometry}
-              color={isSelectedAcknowledged ? "#10b981" : "#dc2626"}
+              color={isAcknowledged ? "#10b981" : "#dc2626"}
               weight={6}
               opacity={0.95}
               lineCap="round"
@@ -270,11 +286,13 @@ export interface MapViewProps {
   destinationName?: string;
   vehicleId?: string;
   isEmergencyActive?: boolean;
+  isAcknowledged?: boolean;
   height?: string;
   gpsAccuracyMeters?: number;
   allEmergencies?: Emergency[];
   selectedEmergencyId?: string;
   onSelectEmergency?: (id: string) => void;
+  policePos?: [number, number] | null;
 }
 
 export const MapView: React.FC<MapViewProps> = ({
@@ -288,7 +306,9 @@ export const MapView: React.FC<MapViewProps> = ({
   gpsAccuracyMeters = 15,
   allEmergencies = [],
   selectedEmergencyId,
-  onSelectEmergency
+  onSelectEmergency,
+  isAcknowledged = false,
+  policePos
 }) => {
   const cLat = isValidCoord(currentLat) ? currentLat : (isValidCoord(startLat) ? startLat : 12.8620);
   const cLng = isValidCoord(currentLng) ? currentLng : (isValidCoord(startLng) ? startLng : 77.5280);
@@ -307,6 +327,8 @@ export const MapView: React.FC<MapViewProps> = ({
       allEmergencies={allEmergencies}
       selectedEmergencyId={selectedEmergencyId}
       onSelectEmergency={onSelectEmergency}
+      isAcknowledged={isAcknowledged}
+      policePos={policePos}
     />
   );
 };

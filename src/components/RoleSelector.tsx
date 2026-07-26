@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from "react";
-import { ShieldAlert, Ambulance, Shield, CheckCircle2, AlertCircle, Radio, UserCheck } from "lucide-react";
+import { ShieldAlert, Ambulance, Shield, CheckCircle2, AlertCircle, Radio, Sparkles, Lock, LogOut, UserCheck } from "lucide-react";
 import { Role, UserSession } from "../types";
 import { NotificationService } from "../services/notification";
-import { db } from "../lib/firebase";
-import { doc, setDoc } from "firebase/firestore";
+import { auth, db, googleProvider, signInWithGoogleNativeOrWeb, signOutUser } from "../lib/firebase";
+import { Capacitor } from "@capacitor/core";
+import { onAuthStateChanged } from "firebase/auth";
+import { doc, getDoc, setDoc } from "firebase/firestore";
 
 interface RoleSelectorProps {
   onLogin: (session: UserSession) => void;
@@ -14,9 +16,103 @@ export const RoleSelector: React.FC<RoleSelectorProps> = ({ onLogin }) => {
   const [vehicleId, setVehicleId] = useState("");
   const [badgeNumber, setBadgeNumber] = useState("");
   const [officerName, setOfficerName] = useState("");
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [isProfileRestored, setIsProfileRestored] = useState(false);
+  const [isEditingProfile, setIsEditingProfile] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [googleAccount, setGoogleAccount] = useState<{
+    name: string;
+    email: string;
+    avatarUrl: string;
+  } | null>(null);
 
-  // Pre-fill initial saved credentials on mount so user sees them immediately
+  // Load saved profile for a Google account from localStorage or Firestore
+  const loadSavedUserProfile = async (email: string) => {
+    const normalizedEmail = email.toLowerCase();
+    const localKey = `preroute_profile_${normalizedEmail}`;
+
+    let profile: any = null;
+    // 1. Check LocalStorage
+    const localData = localStorage.getItem(localKey) || localStorage.getItem("ambulance_preclear_last_credentials");
+    if (localData) {
+      try {
+        profile = JSON.parse(localData);
+      } catch (e) {
+        console.warn("Invalid local profile JSON", e);
+      }
+    }
+
+    // 2. Check Firestore (Source of truth across devices)
+    try {
+      const userRef = doc(db, "users", normalizedEmail);
+      const userSnap = await getDoc(userRef);
+      if (userSnap.exists()) {
+        const remoteData = userSnap.data();
+        profile = { ...profile, ...remoteData };
+        localStorage.setItem(localKey, JSON.stringify(profile));
+        localStorage.setItem("ambulance_preclear_last_credentials", JSON.stringify(profile));
+      }
+    } catch (e) {
+      console.warn("Could not fetch remote user profile from Firestore:", e);
+    }
+
+    return profile;
+  };
+
+  // Helper to apply user profile data to form state & return resolved profile info
+  const applyGoogleUserAndProfile = async (user: any) => {
+    let resolvedRole: "driver" | "police" = selectedRole;
+    let resolvedName = user.displayName || officerName || (selectedRole === "driver" ? "Ramesh Kumar" : "Inspector Vijay");
+    let resolvedVehicleId = vehicleId || "KA-05-EM-0108";
+    let resolvedBadgeNumber = badgeNumber || "BLR-TP-402";
+
+    const profile = {
+      name: resolvedName,
+      email: user.email || `${selectedRole}@preclear.gov.in`,
+      avatarUrl: user.photoURL || `https://api.dicebear.com/7.x/bottts/svg?seed=${user.uid}`
+    };
+
+    setGoogleAccount(profile);
+
+    if (user.email) {
+      const savedProfile = await loadSavedUserProfile(user.email);
+      if (savedProfile) {
+        setIsProfileRestored(true);
+        if (savedProfile.role === "driver" || savedProfile.role === "police") {
+          resolvedRole = savedProfile.role;
+          setSelectedRole(savedProfile.role);
+        }
+        if (savedProfile.name || savedProfile.officerName) {
+          resolvedName = savedProfile.name || savedProfile.officerName;
+          setOfficerName(resolvedName);
+        }
+        if (savedProfile.vehicleId) {
+          resolvedVehicleId = savedProfile.vehicleId;
+          setVehicleId(savedProfile.vehicleId);
+        }
+        if (savedProfile.badgeNumber) {
+          resolvedBadgeNumber = savedProfile.badgeNumber;
+          setBadgeNumber(savedProfile.badgeNumber);
+        }
+      } else {
+        if (user.displayName) {
+          resolvedName = user.displayName;
+          setOfficerName(user.displayName);
+        }
+      }
+    }
+
+    return {
+      name: resolvedName,
+      email: profile.email,
+      avatarUrl: profile.avatarUrl,
+      role: resolvedRole,
+      vehicleId: resolvedRole === "driver" ? resolvedVehicleId : undefined,
+      badgeNumber: resolvedRole === "police" ? resolvedBadgeNumber : undefined
+    };
+  };
+
+  // Pre-fill initial saved credentials on mount so user sees them immediately in Android/Web
   useEffect(() => {
     try {
       const savedRaw = localStorage.getItem("ambulance_preclear_last_credentials") || localStorage.getItem("ambulance_preclear_session");
@@ -41,13 +137,104 @@ export const RoleSelector: React.FC<RoleSelectorProps> = ({ onLogin }) => {
     }
   }, []);
 
+  // Listen to Firebase Auth state changes
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (user) {
+        await applyGoogleUserAndProfile(user);
+      } else {
+        setGoogleAccount(null);
+      }
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  // Handle Google Sign-In & Direct Instant Login
+  const handleGoogleSignIn = async () => {
+    setIsLoggingIn(true);
+    setAuthError(null);
+
+    try {
+      const user = await signInWithGoogleNativeOrWeb();
+      const resolved = await applyGoogleUserAndProfile(user);
+
+      // Instantly generate session and login immediately upon account selection
+      const session: UserSession = {
+        id: `usr_${user.uid || Date.now()}`,
+        name: resolved.name,
+        email: resolved.email,
+        avatarUrl: resolved.avatarUrl,
+        role: resolved.role,
+        vehicleId: resolved.vehicleId,
+        badgeNumber: resolved.badgeNumber,
+        loginProvider: "google",
+        loggedAt: new Date().toISOString()
+      };
+
+      const normalizedEmail = resolved.email.toLowerCase();
+      const profileToSave = {
+        email: normalizedEmail,
+        name: resolved.name,
+        avatarUrl: resolved.avatarUrl,
+        role: resolved.role,
+        vehicleId: resolved.vehicleId,
+        badgeNumber: resolved.badgeNumber,
+        updatedAt: new Date().toISOString()
+      };
+
+      // Save credentials & active session
+      localStorage.setItem("ambulance_preclear_last_credentials", JSON.stringify(profileToSave));
+      localStorage.setItem(`preroute_profile_${normalizedEmail}`, JSON.stringify(profileToSave));
+      localStorage.setItem("ambulance_preclear_session", JSON.stringify(session));
+
+      try {
+        await setDoc(doc(db, "users", normalizedEmail), profileToSave);
+      } catch (err) {
+        console.warn("Could not save user profile to Firestore:", err);
+      }
+
+      try {
+        await NotificationService.requestAllPermissions();
+      } catch (e) {
+        console.warn("Permission request error on Google sign-in:", e);
+      }
+
+      // Directly enter portal view without intermediate setup or consent screen
+      onLogin(session);
+    } catch (err: any) {
+      console.warn("Firebase Google Sign-In failed or was closed:", err);
+      if (err.code === "auth/popup-blocked" || err.code === "auth/cancelled-popup-request" || err.code === "auth/popup-closed-by-user") {
+        setAuthError("Sign-in prompt closed or blocked. Please retry Google Sign-In.");
+      } else {
+        setAuthError(err.message || "Google Sign-In failed. Please try again.");
+      }
+    } finally {
+      setIsLoggingIn(false);
+    }
+  };
+
+  // Handle Sign Out from Google
+  const handleSignOutGoogle = async () => {
+    try {
+      await signOutUser();
+      setGoogleAccount(null);
+      setIsProfileRestored(false);
+      setOfficerName("");
+      setVehicleId("");
+      setBadgeNumber("");
+    } catch (e) {
+      console.warn("Sign out error:", e);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!isFormValid) return;
 
     const name = officerName.trim();
-    const email = `${selectedRole}_${Date.now()}@preclear.gov.in`;
-    const avatarUrl = `https://api.dicebear.com/7.x/bottts/svg?seed=${name}`;
+    const email = googleAccount?.email || `${selectedRole}_${Date.now()}@preclear.gov.in`;
+    const avatarUrl = googleAccount?.avatarUrl || `https://api.dicebear.com/7.x/bottts/svg?seed=${name}`;
 
     const session: UserSession = {
       id: `usr_${Date.now()}`,
@@ -57,12 +244,13 @@ export const RoleSelector: React.FC<RoleSelectorProps> = ({ onLogin }) => {
       role: selectedRole,
       vehicleId: selectedRole === "driver" ? vehicleId.trim() : undefined,
       badgeNumber: selectedRole === "police" ? badgeNumber.trim() : undefined,
-      loginProvider: "direct",
+      loginProvider: "google",
       loggedAt: new Date().toISOString()
     };
 
+    const normalizedEmail = (googleAccount?.email || `${selectedRole}_user@preclear.gov.in`).toLowerCase();
     const profileToSave = {
-      email,
+      email: normalizedEmail,
       name,
       avatarUrl,
       role: selectedRole,
@@ -73,9 +261,10 @@ export const RoleSelector: React.FC<RoleSelectorProps> = ({ onLogin }) => {
 
     // Save profile to localStorage and Firestore
     localStorage.setItem("ambulance_preclear_last_credentials", JSON.stringify(profileToSave));
+    localStorage.setItem(`preroute_profile_${normalizedEmail}`, JSON.stringify(profileToSave));
 
     try {
-      await setDoc(doc(db, "users", name.replace(/\s+/g, "_").toLowerCase()), profileToSave);
+      await setDoc(doc(db, "users", normalizedEmail), profileToSave);
     } catch (err) {
       console.warn("Could not save user profile to Firestore:", err);
     }
@@ -83,7 +272,7 @@ export const RoleSelector: React.FC<RoleSelectorProps> = ({ onLogin }) => {
     // Save active session
     localStorage.setItem("ambulance_preclear_session", JSON.stringify(session));
 
-    // Request native Location & Notification permissions upon portal entry
+    // Request native Android Location & Notification permissions upon portal entry
     try {
       await NotificationService.requestAllPermissions();
     } catch (e) {
@@ -111,7 +300,10 @@ export const RoleSelector: React.FC<RoleSelectorProps> = ({ onLogin }) => {
 
   const isVehicleValid = isValidVehicleId(vehicleId);
 
+  const isLocked = Boolean(isProfileRestored && !isEditingProfile && googleAccount);
+
   const isFormValid = Boolean(
+    googleAccount &&
     officerName.trim() !== "" &&
     (selectedRole === "driver" ? isVehicleValid : badgeNumber.trim() !== "")
   );
@@ -135,7 +327,7 @@ export const RoleSelector: React.FC<RoleSelectorProps> = ({ onLogin }) => {
           Ambulance<span className="text-red-500">PreClear</span>
         </h1>
         <p className="text-slate-400 text-sm sm:text-base text-center mb-8 max-w-md">
-          Emergency Signal Corridor & Vehicle Dispatch System
+          Google Authentication & Vehicle Registration Verification
         </p>
 
         {/* Login Card */}
@@ -143,27 +335,130 @@ export const RoleSelector: React.FC<RoleSelectorProps> = ({ onLogin }) => {
           onSubmit={handleSubmit}
           className="w-full bg-slate-900/90 backdrop-blur-xl p-6 sm:p-8 rounded-3xl border border-slate-800 shadow-2xl flex flex-col gap-6"
         >
-          {/* Portal Credentials Section */}
-          <div className="flex flex-col gap-5">
+          {/* STEP 1: Google Authentication */}
+          <div className="flex flex-col gap-3">
             <div className="flex items-center justify-between">
               <label className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
                 <span className="w-5 h-5 rounded-full bg-blue-600 text-white flex items-center justify-center text-[10px] font-black">1</span>
-                Portal Role & Credentials
+                Google Account Authentication
               </label>
-              {isProfileRestored && (
+              {googleAccount && (
                 <span className="text-[11px] font-bold text-emerald-400 bg-emerald-950/80 border border-emerald-800/80 px-2.5 py-0.5 rounded-full flex items-center gap-1">
-                  <UserCheck className="w-3 h-3" /> Credentials Restored
+                  <UserCheck className="w-3 h-3" /> Authenticated
                 </span>
               )}
             </div>
+
+            {googleAccount ? (
+              <div className="bg-slate-950/80 p-4 rounded-2xl border border-emerald-500/40 flex items-center justify-between gap-3 shadow-inner">
+                <div className="flex items-center gap-3 min-w-0">
+                  <img
+                    src={googleAccount.avatarUrl}
+                    alt={googleAccount.name}
+                    className="w-11 h-11 rounded-full border-2 border-emerald-400/80 object-cover shrink-0"
+                  />
+                  <div className="min-w-0">
+                    <div className="text-sm font-black text-white truncate">{googleAccount.name}</div>
+                    <div className="text-xs text-slate-400 truncate">{googleAccount.email}</div>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleSignOutGoogle}
+                  className="text-xs font-bold text-slate-400 hover:text-red-400 bg-slate-900 hover:bg-slate-800 border border-slate-700/80 px-3 py-2 rounded-xl transition-all flex items-center gap-1.5 shrink-0 cursor-pointer"
+                  title="Sign out of Google"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                  <span>Switch</span>
+                </button>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-2">
+                <button
+                  type="button"
+                  onClick={handleGoogleSignIn}
+                  disabled={isLoggingIn}
+                  className="w-full bg-slate-950 hover:bg-slate-900 text-white font-black py-4 px-5 rounded-2xl border border-blue-500/50 hover:border-blue-400 transition-all flex items-center justify-center gap-3 shadow-lg shadow-blue-950/40 cursor-pointer disabled:opacity-50"
+                  id="btn-google-signin"
+                >
+                  <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24">
+                    <path
+                      fill="#4285F4"
+                      d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                    />
+                    <path
+                      fill="#34A853"
+                      d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                    />
+                    <path
+                      fill="#FBBC05"
+                      d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
+                    />
+                    <path
+                      fill="#EA4335"
+                      d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
+                    />
+                  </svg>
+                  <span>{isLoggingIn ? "Connecting Google Account..." : "Continue with Google"}</span>
+                </button>
+                <p className="text-[11px] text-slate-400 text-center flex items-center justify-center gap-1">
+                  <Lock className="w-3 h-3 text-amber-400" />
+                  Google Authentication is required to unlock portal access
+                </p>
+              </div>
+            )}
+
+            {authError && (
+              <div className="bg-amber-500/10 border border-amber-500/30 p-2.5 rounded-xl text-amber-300 text-xs flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 text-amber-400 shrink-0" />
+                <span>{authError}</span>
+              </div>
+            )}
+          </div>
+
+          {/* STEP 2: Portal Credentials Section */}
+          <div className="flex flex-col gap-5 transition-all duration-300">
+            <label className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+              <span className="w-5 h-5 rounded-full bg-blue-600 text-white flex items-center justify-center text-[10px] font-black">2</span>
+              Portal Role & Vehicle Credentials
+            </label>
+
+            {isProfileRestored && (
+              <div className="bg-emerald-500/10 border border-emerald-500/30 p-3 rounded-2xl text-emerald-300 text-xs flex items-center justify-between gap-2.5">
+                <div className="flex items-center gap-2 min-w-0">
+                  <UserCheck className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <span className="truncate">Saved credentials restored ({selectedRole === "driver" ? vehicleId || "Ambulance" : badgeNumber || "Police"}).</span>
+                </div>
+                {!isEditingProfile ? (
+                  <button
+                    type="button"
+                    onClick={() => setIsEditingProfile(true)}
+                    className="text-[11px] font-bold text-amber-300 hover:text-amber-200 underline cursor-pointer shrink-0"
+                  >
+                    Edit Details
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setIsEditingProfile(false)}
+                    className="text-[11px] font-bold text-emerald-400 hover:text-emerald-300 underline cursor-pointer shrink-0"
+                  >
+                    Lock Fields
+                  </button>
+                )}
+              </div>
+            )}
 
             {/* Role Selection Tabs */}
             <div className="grid grid-cols-2 gap-3">
               {/* Ambulance Driver Option */}
               <button
                 type="button"
-                onClick={() => setSelectedRole("driver")}
-                className={`p-3.5 rounded-2xl border text-left transition-all duration-200 flex flex-col gap-1.5 cursor-pointer ${
+                onClick={() => !isLocked && setSelectedRole("driver")}
+                disabled={isLocked}
+                className={`p-3.5 rounded-2xl border text-left transition-all duration-200 flex flex-col gap-1.5 ${
+                  isLocked ? "cursor-not-allowed opacity-80" : "cursor-pointer"
+                } ${
                   selectedRole === "driver"
                     ? "bg-blue-600/20 border-blue-500 text-white shadow-lg ring-2 ring-blue-500/40"
                     : "bg-slate-950/60 border-slate-800 text-slate-400 hover:border-slate-700"
@@ -175,7 +470,7 @@ export const RoleSelector: React.FC<RoleSelectorProps> = ({ onLogin }) => {
                     <Ambulance className="w-4 h-4" />
                   </div>
                   {selectedRole === "driver" && (
-                    <CheckCircle2 className="w-4 h-4 text-blue-400" />
+                    isLocked ? <Lock className="w-4 h-4 text-emerald-400" /> : <CheckCircle2 className="w-4 h-4 text-blue-400" />
                   )}
                 </div>
                 <div>
@@ -187,8 +482,11 @@ export const RoleSelector: React.FC<RoleSelectorProps> = ({ onLogin }) => {
               {/* Traffic Police Option */}
               <button
                 type="button"
-                onClick={() => setSelectedRole("police")}
-                className={`p-3.5 rounded-2xl border text-left transition-all duration-200 flex flex-col gap-1.5 cursor-pointer ${
+                onClick={() => !isLocked && setSelectedRole("police")}
+                disabled={isLocked}
+                className={`p-3.5 rounded-2xl border text-left transition-all duration-200 flex flex-col gap-1.5 ${
+                  isLocked ? "cursor-not-allowed opacity-80" : "cursor-pointer"
+                } ${
                   selectedRole === "police"
                     ? "bg-red-600/20 border-red-500 text-white shadow-lg ring-2 ring-red-500/40"
                     : "bg-slate-950/60 border-slate-800 text-slate-400 hover:border-slate-700"
@@ -200,7 +498,7 @@ export const RoleSelector: React.FC<RoleSelectorProps> = ({ onLogin }) => {
                     <Shield className="w-4 h-4" />
                   </div>
                   {selectedRole === "police" && (
-                    <CheckCircle2 className="w-4 h-4 text-red-400" />
+                    isLocked ? <Lock className="w-4 h-4 text-emerald-400" /> : <CheckCircle2 className="w-4 h-4 text-red-400" />
                   )}
                 </div>
                 <div>
@@ -212,15 +510,24 @@ export const RoleSelector: React.FC<RoleSelectorProps> = ({ onLogin }) => {
 
             {/* Officer Name Field */}
             <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1">
-                Display / Officer Name <span className="text-red-400">*</span>
+              <label className="block text-xs font-semibold text-slate-300 mb-1 flex items-center justify-between">
+                <span>Display / Officer Name <span className="text-red-400">*</span></span>
+                {isLocked && (
+                  <span className="text-emerald-400 text-[11px] font-medium flex items-center gap-1">
+                    <Lock className="w-3 h-3" /> Locked
+                  </span>
+                )}
               </label>
               <input
                 type="text"
                 value={officerName}
                 onChange={(e) => setOfficerName(e.target.value)}
                 placeholder={selectedRole === "driver" ? "e.g. Ramesh Kumar" : "e.g. Inspector Vijay"}
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-blue-500"
+                className={`w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-blue-500 ${
+                  isLocked ? "bg-slate-950/80 cursor-not-allowed text-slate-300" : ""
+                }`}
+                disabled={isLocked}
+                readOnly={isLocked}
               />
             </div>
 
@@ -229,7 +536,11 @@ export const RoleSelector: React.FC<RoleSelectorProps> = ({ onLogin }) => {
               <div>
                 <label className="block text-xs font-semibold text-slate-300 mb-1 flex items-center justify-between">
                   <span>Ambulance Registration Vehicle ID <span className="text-red-400">*</span></span>
-                  {vehicleId.trim() && (
+                  {isLocked ? (
+                    <span className="text-emerald-400 text-[11px] font-medium flex items-center gap-1">
+                      <Lock className="w-3 h-3" /> Locked
+                    </span>
+                  ) : vehicleId.trim() && (
                     isVehicleValid ? (
                       <span className="text-emerald-400 text-[11px] font-bold flex items-center gap-1">
                         <CheckCircle2 className="w-3 h-3" /> Valid Vehicle ID
@@ -248,12 +559,16 @@ export const RoleSelector: React.FC<RoleSelectorProps> = ({ onLogin }) => {
                   maxLength={13}
                   placeholder="KA-05-EM-0108"
                   className={`w-full bg-slate-950 border rounded-xl px-3.5 py-2.5 text-sm text-white placeholder-slate-600 focus:outline-none font-mono uppercase transition-colors ${
-                    vehicleId.trim()
+                    isLocked
+                      ? "border-slate-800 bg-slate-950/80 cursor-not-allowed text-slate-300"
+                      : vehicleId.trim()
                       ? isVehicleValid
                         ? "border-emerald-500/80 focus:border-emerald-400"
                         : "border-amber-500/80 focus:border-amber-400"
                       : "border-slate-800 focus:border-blue-500"
                   }`}
+                  disabled={isLocked}
+                  readOnly={isLocked}
                   required
                 />
                 <p className="text-[11px] text-slate-400 mt-1">
@@ -262,15 +577,24 @@ export const RoleSelector: React.FC<RoleSelectorProps> = ({ onLogin }) => {
               </div>
             ) : (
               <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">
-                  Traffic Control Badge / Inspector ID <span className="text-red-400">*</span>
+                <label className="block text-xs font-semibold text-slate-300 mb-1 flex items-center justify-between">
+                  <span>Traffic Control Badge / Inspector ID <span className="text-red-400">*</span></span>
+                  {isLocked && (
+                    <span className="text-emerald-400 text-[11px] font-medium flex items-center gap-1">
+                      <Lock className="w-3 h-3" /> Locked
+                    </span>
+                  )}
                 </label>
                 <input
                   type="text"
                   value={badgeNumber}
                   onChange={(e) => setBadgeNumber(e.target.value)}
                   placeholder="BLR-TP-402"
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-red-500 font-mono"
+                  className={`w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-red-500 font-mono ${
+                    isLocked ? "bg-slate-950/80 cursor-not-allowed text-slate-300" : ""
+                  }`}
+                  disabled={isLocked}
+                  readOnly={isLocked}
                   required
                 />
               </div>
@@ -303,8 +627,9 @@ export const RoleSelector: React.FC<RoleSelectorProps> = ({ onLogin }) => {
                   To enter the portal:
                 </span>
                 <ul className="list-disc list-inside text-[11px] space-y-0.5 text-slate-400 pl-1">
-                  {!officerName.trim() && <li>Enter Display / Officer Name</li>}
-                  {selectedRole === "driver" && (
+                  {!googleAccount && <li>Sign in with Google above</li>}
+                  {googleAccount && !officerName.trim() && <li>Enter Display / Officer Name</li>}
+                  {googleAccount && selectedRole === "driver" && (
                     !vehicleId.trim() ? (
                       <li>Enter Ambulance Registration Vehicle ID</li>
                     ) : !isVehicleValid ? (
@@ -313,7 +638,7 @@ export const RoleSelector: React.FC<RoleSelectorProps> = ({ onLogin }) => {
                       </li>
                     ) : null
                   )}
-                  {selectedRole === "police" && !badgeNumber.trim() && (
+                  {googleAccount && selectedRole === "police" && !badgeNumber.trim() && (
                     <li>Enter Traffic Control Badge ID</li>
                   )}
                 </ul>
@@ -330,5 +655,4 @@ export const RoleSelector: React.FC<RoleSelectorProps> = ({ onLogin }) => {
     </div>
   );
 };
-
 

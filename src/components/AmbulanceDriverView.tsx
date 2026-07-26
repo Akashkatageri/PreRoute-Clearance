@@ -60,11 +60,8 @@ export const AmbulanceDriverView: React.FC<AmbulanceDriverViewProps> = ({
   const [showToast, setShowToast] = useState(false);
 
   // Active Emergency for this vehicle (normalized case-insensitive matching with server)
-  const TWELVE_HOURS_MS = 12 * 60 * 60 * 1000;
   const activeEmergency = activeEmergencies.find((e) => {
-    if (!e || e.status === "completed") return false;
-    const updatedTimeMs = new Date(e.lastUpdated || e.createdAt || "").getTime();
-    if (!isNaN(updatedTimeMs) && Date.now() - updatedTimeMs > TWELVE_HOURS_MS) return false;
+    if (!e || e.status === "completed" || e.status === "cleared") return false;
     const normV = (vehicleId || "").trim().toUpperCase();
     const normEv = (e.vehicleId || "").trim().toUpperCase();
     if (normV && normEv) return normV === normEv;

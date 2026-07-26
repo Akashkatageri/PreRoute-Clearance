@@ -8,7 +8,7 @@ export interface UserSession {
   role: 'driver' | 'police';
   badgeNumber?: string;
   vehicleId?: string;
-  loginProvider: 'google' | 'native' | 'direct';
+  loginProvider: 'google' | 'native';
   loggedAt: string;
 }
 
@@ -32,6 +32,7 @@ export interface Emergency {
   etaMinutes: number;
   distanceKm: number;
   createdAt: string;
+  createdTimestamp?: number;
   lastUpdated: string;
   routeGeometry?: [number, number][]; // Array of [lat, lng]
 }

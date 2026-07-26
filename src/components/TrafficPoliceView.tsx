@@ -19,20 +19,26 @@ export const TrafficPoliceView: React.FC<TrafficPoliceViewProps> = ({
   onLogout
 }) => {
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [filterMode, setFilterMode] = useState<"all" | "pending" | "acknowledged">("all");
+  const [policePos, setPolicePos] = useState<[number, number] | null>(null);
   const seenEmergenciesRef = useRef<Set<string>>(new Set());
   const isInitialLoadRef = useRef(true);
 
-  // Active non-completed emergencies created/updated within 12 hours with guaranteed field fallbacks
-  const TWELVE_HOURS_MS = 12 * 60 * 60 * 1000;
-  const now = Date.now();
+  // Track Police Officer's current GPS location
+  useEffect(() => {
+    if (typeof window === "undefined" || !("geolocation" in navigator)) return;
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setPolicePos([pos.coords.latitude, pos.coords.longitude]);
+      },
+      (err) => console.warn("Police GPS notice:", err),
+      { enableHighAccuracy: true, timeout: 6000 }
+    );
+  }, []);
 
+  // Active non-completed and non-cleared emergencies with guaranteed field fallbacks
   const activeList = emergencies
-    .filter((e) => {
-      if (!e || e.status === "completed") return false;
-      const updatedTimeMs = new Date(e.lastUpdated || e.createdAt || "").getTime();
-      if (!isNaN(updatedTimeMs) && now - updatedTimeMs > TWELVE_HOURS_MS) return false;
-      return true;
-    })
+    .filter((e) => e && e.status !== "completed" && e.status !== "cleared")
     .map((e) => {
       const vId = (e.vehicleId && e.vehicleId.trim()) || e.id || "AMBULANCE";
       const dName = (e.destinationName && e.destinationName.trim()) || "Hospital";
@@ -53,6 +59,16 @@ export const TrafficPoliceView: React.FC<TrafficPoliceViewProps> = ({
         priority: prio
       };
     });
+
+  const pendingList = activeList.filter((e) => e.status !== "acknowledged");
+  const acknowledgedList = activeList.filter((e) => e.status === "acknowledged");
+
+  const displayList =
+    filterMode === "pending"
+      ? pendingList
+      : filterMode === "acknowledged"
+      ? acknowledgedList
+      : activeList;
 
   // Request all mobile permissions (Location & Push Notifications) on mount
   useEffect(() => {
@@ -172,12 +188,30 @@ export const TrafficPoliceView: React.FC<TrafficPoliceViewProps> = ({
 
       {/* Mobile Horizontal Selector Bar (Visible only on screens < lg) */}
       {activeList.length > 0 && (
-        <div className="lg:hidden bg-slate-900 px-3 py-2.5 border-b border-slate-800 sticky top-[57px] z-20 overflow-x-auto no-scrollbar shadow-inner">
-          <div className="flex items-center gap-2 min-w-max">
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider pr-1">
-              Vehicles ({activeList.length}):
-            </span>
-            {activeList.map((emg, idx) => {
+        <div className="lg:hidden bg-slate-900 px-3 py-2.5 border-b border-slate-800 sticky top-[57px] z-20 flex flex-col gap-2 shadow-inner">
+          <div className="flex items-center gap-1.5 bg-slate-850 p-1 rounded-xl text-[10px] font-bold">
+            <button
+              onClick={() => setFilterMode("all")}
+              className={`px-2.5 py-1 rounded-lg transition-all ${filterMode === "all" ? "bg-slate-700 text-white shadow-xs" : "text-slate-400"}`}
+            >
+              All ({activeList.length})
+            </button>
+            <button
+              onClick={() => setFilterMode("pending")}
+              className={`px-2.5 py-1 rounded-lg transition-all ${filterMode === "pending" ? "bg-red-600 text-white shadow-xs" : "text-slate-400"}`}
+            >
+              Pending ({pendingList.length})
+            </button>
+            <button
+              onClick={() => setFilterMode("acknowledged")}
+              className={`px-2.5 py-1 rounded-lg transition-all ${filterMode === "acknowledged" ? "bg-emerald-600 text-white shadow-xs" : "text-slate-400"}`}
+            >
+              Acknowledged ({acknowledgedList.length})
+            </button>
+          </div>
+
+          <div className="flex items-center gap-2 overflow-x-auto no-scrollbar min-w-max">
+            {displayList.map((emg, idx) => {
               const isSelected = selectedEmergency?.id === emg.id;
               const isAck = emg.status === "acknowledged";
               return (
@@ -186,14 +220,14 @@ export const TrafficPoliceView: React.FC<TrafficPoliceViewProps> = ({
                   onClick={() => setSelectedId(emg.id)}
                   className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer border ${
                     isSelected
-                      ? "bg-red-600 text-white border-red-500 shadow-md ring-2 ring-red-400/40"
+                      ? isAck ? "bg-emerald-600 text-white border-emerald-500 shadow-md ring-2 ring-emerald-400/40" : "bg-red-600 text-white border-red-500 shadow-md ring-2 ring-red-400/40"
                       : "bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-750"
                   }`}
                 >
                   <Siren className="w-3.5 h-3.5 animate-pulse shrink-0" />
                   <span>{emg.vehicleId}</span>
                   {isAck && (
-                    <span className="bg-emerald-500 text-slate-950 font-black text-[9px] px-1.5 py-0.2 rounded-md">
+                    <span className="bg-emerald-400 text-slate-950 font-black text-[9px] px-1.5 py-0.2 rounded-md">
                       ✓ ACK
                     </span>
                   )}
@@ -213,19 +247,41 @@ export const TrafficPoliceView: React.FC<TrafficPoliceViewProps> = ({
         <aside className="hidden lg:flex lg:col-span-4 flex-col gap-3">
           <div className="flex items-center justify-between">
             <h2 className="text-xs font-bold text-slate-500 uppercase tracking-wider">
-              ACTIVE EMERGENCIES ({activeList.length})
+              ACTIVE RADAR ({activeList.length})
             </h2>
           </div>
 
-          {activeList.length === 0 ? (
+          {/* Filter Tabs */}
+          <div className="grid grid-cols-3 gap-1 bg-slate-200/80 p-1 rounded-xl text-[11px] font-extrabold text-slate-600">
+            <button
+              onClick={() => setFilterMode("all")}
+              className={`py-1.5 rounded-lg transition-all cursor-pointer ${filterMode === "all" ? "bg-white text-slate-900 shadow-xs" : "hover:text-slate-900"}`}
+            >
+              All ({activeList.length})
+            </button>
+            <button
+              onClick={() => setFilterMode("pending")}
+              className={`py-1.5 rounded-lg transition-all cursor-pointer ${filterMode === "pending" ? "bg-red-600 text-white shadow-xs" : "hover:text-slate-900"}`}
+            >
+              Pending ({pendingList.length})
+            </button>
+            <button
+              onClick={() => setFilterMode("acknowledged")}
+              className={`py-1.5 rounded-lg transition-all cursor-pointer ${filterMode === "acknowledged" ? "bg-emerald-600 text-white shadow-xs" : "hover:text-slate-900"}`}
+            >
+              Ack ({acknowledgedList.length})
+            </button>
+          </div>
+
+          {displayList.length === 0 ? (
             <div className="bg-white rounded-2xl p-8 border border-slate-200 text-center text-slate-400 flex flex-col items-center shadow-xs">
               <CheckCircle className="w-10 h-10 mb-2 text-emerald-500 opacity-80" />
-              <p className="font-semibold text-slate-700">No Active Emergencies</p>
-              <p className="text-xs mt-1">All green corridors are clear.</p>
+              <p className="font-semibold text-slate-700">No Routes in this view</p>
+              <p className="text-xs mt-1">All emergency green corridors are clear.</p>
             </div>
           ) : (
             <div className="flex flex-col gap-3">
-              {activeList.map((emg, idx) => {
+              {displayList.map((emg, idx) => {
                 const isSelected = selectedEmergency?.id === emg.id;
                 const isAck = emg.status === "acknowledged";
                 return (
@@ -234,13 +290,13 @@ export const TrafficPoliceView: React.FC<TrafficPoliceViewProps> = ({
                     onClick={() => setSelectedId(emg.id)}
                     className={`w-full text-left p-4 rounded-2xl border transition-all cursor-pointer flex flex-col gap-2 ${
                       isSelected
-                        ? "bg-white border-red-500 shadow-md ring-2 ring-red-100"
+                        ? isAck ? "bg-white border-emerald-500 shadow-md ring-2 ring-emerald-100" : "bg-white border-red-500 shadow-md ring-2 ring-red-100"
                         : "bg-white border-slate-200 hover:border-slate-300 shadow-2xs"
                     }`}
                   >
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2 min-w-0">
-                        <div className="p-1.5 bg-red-50 text-red-600 rounded-lg shrink-0">
+                        <div className={`p-1.5 rounded-lg shrink-0 ${isAck ? "bg-emerald-50 text-emerald-600" : "bg-red-50 text-red-600"}`}>
                           <Siren className="w-4 h-4 animate-pulse" />
                         </div>
                         <span className="font-extrabold text-slate-900 text-base truncate">
@@ -256,7 +312,7 @@ export const TrafficPoliceView: React.FC<TrafficPoliceViewProps> = ({
                           </span>
                         )}
                       </div>
-                      <span className="bg-red-50 text-red-600 font-black text-xs px-2.5 py-1 rounded-lg shrink-0">
+                      <span className={`font-black text-xs px-2.5 py-1 rounded-lg shrink-0 ${isAck ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-600"}`}>
                         {emg.etaMinutes}m
                       </span>
                     </div>
@@ -276,17 +332,23 @@ export const TrafficPoliceView: React.FC<TrafficPoliceViewProps> = ({
           {selectedEmergency ? (
             <>
               {/* Emergency Active Card Header */}
-              <div className="bg-slate-900 text-white p-4 sm:p-6 rounded-3xl shadow-xl border border-slate-800 flex flex-col gap-4">
+              <div className={`text-white p-4 sm:p-6 rounded-3xl shadow-xl border transition-all flex flex-col gap-4 ${
+                selectedEmergency.status === "acknowledged" ? "bg-slate-900 border-emerald-500/50" : "bg-slate-900 border-slate-800"
+              }`}>
                 <div className="flex items-start gap-3 sm:gap-4">
-                  <div className="p-3 bg-red-600/30 border border-red-500/40 rounded-2xl shrink-0">
-                    <Siren className="w-7 h-7 sm:w-8 sm:h-8 text-red-500 animate-pulse" />
+                  <div className={`p-3 border rounded-2xl shrink-0 ${
+                    selectedEmergency.status === "acknowledged" ? "bg-emerald-500/20 border-emerald-500/40 text-emerald-400" : "bg-red-600/30 border-red-500/40 text-red-500"
+                  }`}>
+                    <Siren className="w-7 h-7 sm:w-8 sm:h-8 animate-pulse" />
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2 mb-1 flex-wrap">
                       <h2 className="text-base sm:text-lg font-black tracking-wide uppercase text-white">
-                        EMERGENCY ACTIVE
+                        {selectedEmergency.status === "acknowledged" ? "GREEN CORRIDOR ACKNOWLEDGED" : "EMERGENCY DISPATCH ACTIVE"}
                       </h2>
-                      <span className="bg-red-500 text-white text-[10px] font-extrabold px-2.5 py-0.5 rounded-md uppercase">
+                      <span className={`text-[10px] font-extrabold px-2.5 py-0.5 rounded-md uppercase ${
+                        selectedEmergency.status === "acknowledged" ? "bg-emerald-500 text-slate-950 font-black" : "bg-red-500 text-white"
+                      }`}>
                         {selectedEmergency.priority || "critical"}
                       </span>
                     </div>
@@ -303,7 +365,7 @@ export const TrafficPoliceView: React.FC<TrafficPoliceViewProps> = ({
                       )}
                       {selectedEmergency.status === "acknowledged" && (
                         <span className="flex items-center gap-1 text-emerald-300 font-bold bg-emerald-950/80 border border-emerald-800/80 px-2.5 py-1 rounded-lg">
-                          <CheckCircle className="w-3.5 h-3.5 text-emerald-400" /> Acknowledged by Police
+                          <CheckCircle className="w-3.5 h-3.5 text-emerald-400" /> Acknowledged Green Corridor Active
                         </span>
                       )}
                       {selectedEmergency.status === "cleared" && (
@@ -329,7 +391,7 @@ export const TrafficPoliceView: React.FC<TrafficPoliceViewProps> = ({
                     {selectedEmergency.status === "acknowledged" ? (
                       <>
                         <CheckCircle className="w-5 h-5 text-slate-950" />
-                        <span>✓ Signal Priority Acknowledged</span>
+                        <span>✓ Signal Priority Acknowledged (Corridor Live)</span>
                       </>
                     ) : (
                       <>
@@ -432,7 +494,7 @@ export const TrafficPoliceView: React.FC<TrafficPoliceViewProps> = ({
                       <AlertTriangle className="w-3.5 h-3.5 text-sky-600" /> Police Action Plan
                     </span>
                     <p className="leading-relaxed text-slate-600 text-[11px]">
-                      Override traffic signals along the red corridor route. Ensure all intersections remain clear for immediate ambulance passage.
+                      Override traffic signals along the green corridor route. Keep intersections clear until ambulance passes post or driver completes trip.
                     </p>
                   </div>
                 </div>
@@ -450,6 +512,8 @@ export const TrafficPoliceView: React.FC<TrafficPoliceViewProps> = ({
                     destinationName={selectedEmergency.destinationName}
                     vehicleId={selectedEmergency.vehicleId}
                     isEmergencyActive={selectedEmergency.status !== "completed"}
+                    isAcknowledged={selectedEmergency.status === "acknowledged"}
+                    policePos={policePos}
                     allEmergencies={emergencies}
                     selectedEmergencyId={selectedEmergency.id}
                     onSelectEmergency={setSelectedId}

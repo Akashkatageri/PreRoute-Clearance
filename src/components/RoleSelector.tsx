@@ -26,90 +26,93 @@ export const RoleSelector: React.FC<RoleSelectorProps> = ({ onLogin }) => {
     avatarUrl: string;
   } | null>(null);
 
-  // Load saved profile for a Google account from localStorage or Firestore
+  // Load saved profile for a Google account from Firestore or localStorage
   const loadSavedUserProfile = async (email: string) => {
-    const normalizedEmail = email.toLowerCase();
+    const normalizedEmail = email.toLowerCase().trim();
+    if (!normalizedEmail) return null;
+
     const localKey = `preroute_profile_${normalizedEmail}`;
-
     let profile: any = null;
-    // 1. Check LocalStorage
-    const localData = localStorage.getItem(localKey) || localStorage.getItem("ambulance_preclear_last_credentials");
-    if (localData) {
-      try {
-        profile = JSON.parse(localData);
-      } catch (e) {
-        console.warn("Invalid local profile JSON", e);
-      }
-    }
 
-    // 2. Check Firestore (Source of truth across devices)
+    // 1. Query Firestore (Source of truth across Web and Android devices)
     try {
       const userRef = doc(db, "users", normalizedEmail);
       const userSnap = await getDoc(userRef);
       if (userSnap.exists()) {
-        const remoteData = userSnap.data();
-        profile = { ...profile, ...remoteData };
-        localStorage.setItem(localKey, JSON.stringify(profile));
-        localStorage.setItem("ambulance_preclear_last_credentials", JSON.stringify(profile));
+        profile = userSnap.data();
+        if (profile) {
+          localStorage.setItem(localKey, JSON.stringify(profile));
+          localStorage.setItem("ambulance_preclear_last_credentials", JSON.stringify(profile));
+          return profile;
+        }
       }
     } catch (e) {
       console.warn("Could not fetch remote user profile from Firestore:", e);
     }
 
+    // 2. Check LocalStorage specifically for this email
+    const localData = localStorage.getItem(localKey);
+    if (localData) {
+      try {
+        const parsed = JSON.parse(localData);
+        if (parsed && parsed.email === normalizedEmail) {
+          profile = parsed;
+        }
+      } catch (e) {
+        console.warn("Invalid local profile JSON", e);
+      }
+    }
+
     return profile;
   };
 
-  // Helper to apply user profile data to form state & return resolved profile info
+  // Helper to apply user profile data to form state
   const applyGoogleUserAndProfile = async (user: any) => {
-    let resolvedRole: "driver" | "police" = selectedRole;
-    let resolvedName = user.displayName || officerName || (selectedRole === "driver" ? "Ramesh Kumar" : "Inspector Vijay");
-    let resolvedVehicleId = vehicleId || "KA-05-EM-0108";
-    let resolvedBadgeNumber = badgeNumber || "BLR-TP-402";
+    const email = (user.email || "").toLowerCase().trim() || `${selectedRole}@preclear.gov.in`;
+    const avatarUrl = user.photoURL || `https://api.dicebear.com/7.x/bottts/svg?seed=${user.uid || email}`;
 
-    const profile = {
-      name: resolvedName,
-      email: user.email || `${selectedRole}@preclear.gov.in`,
-      avatarUrl: user.photoURL || `https://api.dicebear.com/7.x/bottts/svg?seed=${user.uid}`
-    };
-
-    setGoogleAccount(profile);
+    setGoogleAccount({
+      name: user.displayName || officerName || "",
+      email,
+      avatarUrl
+    });
 
     if (user.email) {
       const savedProfile = await loadSavedUserProfile(user.email);
       if (savedProfile) {
         setIsProfileRestored(true);
+        setIsEditingProfile(false);
         if (savedProfile.role === "driver" || savedProfile.role === "police") {
-          resolvedRole = savedProfile.role;
           setSelectedRole(savedProfile.role);
         }
         if (savedProfile.name || savedProfile.officerName) {
-          resolvedName = savedProfile.name || savedProfile.officerName;
-          setOfficerName(resolvedName);
+          setOfficerName(savedProfile.name || savedProfile.officerName);
         }
         if (savedProfile.vehicleId) {
-          resolvedVehicleId = savedProfile.vehicleId;
           setVehicleId(savedProfile.vehicleId);
+        } else {
+          setVehicleId("");
         }
         if (savedProfile.badgeNumber) {
-          resolvedBadgeNumber = savedProfile.badgeNumber;
           setBadgeNumber(savedProfile.badgeNumber);
+        } else {
+          setBadgeNumber("");
         }
       } else {
+        // First-time login for this Google account: Reset role-specific IDs so old user's details aren't inherited
+        setIsProfileRestored(false);
+        setIsEditingProfile(true);
         if (user.displayName) {
-          resolvedName = user.displayName;
           setOfficerName(user.displayName);
+        } else {
+          setOfficerName("");
         }
+        setVehicleId("");
+        setBadgeNumber("");
       }
+    } else if (user.displayName && !officerName) {
+      setOfficerName(user.displayName);
     }
-
-    return {
-      name: resolvedName,
-      email: profile.email,
-      avatarUrl: profile.avatarUrl,
-      role: resolvedRole,
-      vehicleId: resolvedRole === "driver" ? resolvedVehicleId : undefined,
-      badgeNumber: resolvedRole === "police" ? resolvedBadgeNumber : undefined
-    };
   };
 
   // Pre-fill initial saved credentials on mount so user sees them immediately in Android/Web
@@ -150,58 +153,14 @@ export const RoleSelector: React.FC<RoleSelectorProps> = ({ onLogin }) => {
     return () => unsubscribe();
   }, []);
 
-  // Handle Google Sign-In & Direct Instant Login
+  // Handle Google Sign-In (Authenticates Google account & populates profile)
   const handleGoogleSignIn = async () => {
     setIsLoggingIn(true);
     setAuthError(null);
 
     try {
       const user = await signInWithGoogleNativeOrWeb();
-      const resolved = await applyGoogleUserAndProfile(user);
-
-      // Instantly generate session and login immediately upon account selection
-      const session: UserSession = {
-        id: `usr_${user.uid || Date.now()}`,
-        name: resolved.name,
-        email: resolved.email,
-        avatarUrl: resolved.avatarUrl,
-        role: resolved.role,
-        vehicleId: resolved.vehicleId,
-        badgeNumber: resolved.badgeNumber,
-        loginProvider: "google",
-        loggedAt: new Date().toISOString()
-      };
-
-      const normalizedEmail = resolved.email.toLowerCase();
-      const profileToSave = {
-        email: normalizedEmail,
-        name: resolved.name,
-        avatarUrl: resolved.avatarUrl,
-        role: resolved.role,
-        vehicleId: resolved.vehicleId,
-        badgeNumber: resolved.badgeNumber,
-        updatedAt: new Date().toISOString()
-      };
-
-      // Save credentials & active session
-      localStorage.setItem("ambulance_preclear_last_credentials", JSON.stringify(profileToSave));
-      localStorage.setItem(`preroute_profile_${normalizedEmail}`, JSON.stringify(profileToSave));
-      localStorage.setItem("ambulance_preclear_session", JSON.stringify(session));
-
-      try {
-        await setDoc(doc(db, "users", normalizedEmail), profileToSave);
-      } catch (err) {
-        console.warn("Could not save user profile to Firestore:", err);
-      }
-
-      try {
-        await NotificationService.requestAllPermissions();
-      } catch (e) {
-        console.warn("Permission request error on Google sign-in:", e);
-      }
-
-      // Directly enter portal view without intermediate setup or consent screen
-      onLogin(session);
+      await applyGoogleUserAndProfile(user);
     } catch (err: any) {
       console.warn("Firebase Google Sign-In failed or was closed:", err);
       if (err.code === "auth/popup-blocked" || err.code === "auth/cancelled-popup-request" || err.code === "auth/popup-closed-by-user") {
@@ -264,7 +223,7 @@ export const RoleSelector: React.FC<RoleSelectorProps> = ({ onLogin }) => {
     localStorage.setItem(`preroute_profile_${normalizedEmail}`, JSON.stringify(profileToSave));
 
     try {
-      await setDoc(doc(db, "users", normalizedEmail), profileToSave);
+      await setDoc(doc(db, "users", normalizedEmail), profileToSave, { merge: true });
     } catch (err) {
       console.warn("Could not save user profile to Firestore:", err);
     }

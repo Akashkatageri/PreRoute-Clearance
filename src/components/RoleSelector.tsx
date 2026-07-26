@@ -27,19 +27,19 @@ export const RoleSelector: React.FC<RoleSelectorProps> = ({ onLogin }) => {
   } | null>(null);
 
   // Load saved profile for a Google account from local storage or Firestore
-  const loadSavedUserProfile = async (email: string) => {
+  const loadSavedUserProfile = async (email: string, uid?: string) => {
     const normalizedEmail = email.toLowerCase().trim();
     if (!normalizedEmail) return null;
 
     const localKey = `preroute_profile_${normalizedEmail}`;
     let profile: any = null;
 
-    // 1. Check LocalStorage first for instant restoration (no network latency delay)
+    // 1. Check LocalStorage ONLY if it strictly matches this Google account's email
     try {
-      const localData = localStorage.getItem(localKey) || localStorage.getItem("ambulance_preclear_last_credentials") || localStorage.getItem("ambulance_preclear_session");
+      const localData = localStorage.getItem(localKey);
       if (localData) {
         const parsed = JSON.parse(localData);
-        if (parsed && (parsed.name || parsed.officerName || parsed.vehicleId || parsed.badgeNumber)) {
+        if (parsed && (parsed.email || "").toLowerCase() === normalizedEmail && (parsed.name || parsed.officerName || parsed.vehicleId || parsed.badgeNumber)) {
           profile = parsed;
         }
       }
@@ -47,17 +47,34 @@ export const RoleSelector: React.FC<RoleSelectorProps> = ({ onLogin }) => {
       console.warn("Error reading local cached profile:", e);
     }
 
-    // 2. Query Firestore (Source of truth across Web and Android devices)
+    // 2. Query Firestore (Source of truth across Web and Android devices for the same Google account)
     try {
-      const userRef = doc(db, "users", normalizedEmail);
-      const userSnap = await getDoc(userRef);
-      if (userSnap.exists()) {
-        const remoteProfile = userSnap.data();
+      // Query by normalized email document ID
+      const userRefByEmail = doc(db, "users", normalizedEmail);
+      const userSnapByEmail = await getDoc(userRefByEmail);
+      if (userSnapByEmail.exists()) {
+        const remoteProfile = userSnapByEmail.data();
         if (remoteProfile && (remoteProfile.name || remoteProfile.vehicleId || remoteProfile.badgeNumber)) {
           profile = { ...profile, ...remoteProfile };
-          localStorage.setItem(localKey, JSON.stringify(profile));
-          localStorage.setItem("ambulance_preclear_last_credentials", JSON.stringify(profile));
         }
+      }
+
+      // Query by UID document ID as secondary fallback
+      if ((!profile || (!profile.vehicleId && !profile.badgeNumber)) && uid) {
+        const userRefByUid = doc(db, "users", uid);
+        const userSnapByUid = await getDoc(userRefByUid);
+        if (userSnapByUid.exists()) {
+          const remoteProfile = userSnapByUid.data();
+          if (remoteProfile && (remoteProfile.name || remoteProfile.vehicleId || remoteProfile.badgeNumber)) {
+            profile = { ...profile, ...remoteProfile };
+          }
+        }
+      }
+
+      // Cache the synced Firestore profile locally for fast offline access
+      if (profile) {
+        localStorage.setItem(localKey, JSON.stringify(profile));
+        localStorage.setItem("ambulance_preclear_last_credentials", JSON.stringify(profile));
       }
     } catch (e) {
       console.warn("Could not fetch remote user profile from Firestore:", e);
@@ -77,7 +94,7 @@ export const RoleSelector: React.FC<RoleSelectorProps> = ({ onLogin }) => {
       avatarUrl
     });
 
-    const savedProfile = user.email ? await loadSavedUserProfile(user.email) : null;
+    const savedProfile = user.email ? await loadSavedUserProfile(user.email, user.uid) : null;
 
     if (savedProfile && (savedProfile.role === "driver" || savedProfile.role === "police") && (savedProfile.name || savedProfile.officerName)) {
       const pRole = savedProfile.role as "driver" | "police";
@@ -109,6 +126,7 @@ export const RoleSelector: React.FC<RoleSelectorProps> = ({ onLogin }) => {
 
         const profileToSave = {
           email,
+          uid: user.uid || "",
           name: pName,
           avatarUrl,
           role: pRole,
@@ -213,8 +231,10 @@ export const RoleSelector: React.FC<RoleSelectorProps> = ({ onLogin }) => {
     if (!isFormValid) return;
 
     const name = officerName.trim();
-    const email = googleAccount?.email || `${selectedRole}_${Date.now()}@preclear.gov.in`;
-    const avatarUrl = googleAccount?.avatarUrl || `https://api.dicebear.com/7.x/bottts/svg?seed=${name}`;
+    const currentUser = auth.currentUser;
+    const email = (currentUser?.email || googleAccount?.email || `${selectedRole}_${Date.now()}@preclear.gov.in`).toLowerCase().trim();
+    const uid = currentUser?.uid || "";
+    const avatarUrl = currentUser?.photoURL || googleAccount?.avatarUrl || `https://api.dicebear.com/7.x/bottts/svg?seed=${name}`;
 
     const session: UserSession = {
       id: `usr_${Date.now()}`,
@@ -228,9 +248,9 @@ export const RoleSelector: React.FC<RoleSelectorProps> = ({ onLogin }) => {
       loggedAt: new Date().toISOString()
     };
 
-    const normalizedEmail = (googleAccount?.email || `${selectedRole}_user@preclear.gov.in`).toLowerCase();
     const profileToSave = {
-      email: normalizedEmail,
+      email,
+      uid,
       name,
       avatarUrl,
       role: selectedRole,
@@ -239,12 +259,17 @@ export const RoleSelector: React.FC<RoleSelectorProps> = ({ onLogin }) => {
       updatedAt: new Date().toISOString()
     };
 
-    // Save profile to localStorage and Firestore
+    // Save profile to localStorage and Firestore (for sync across Web & Android)
     localStorage.setItem("ambulance_preclear_last_credentials", JSON.stringify(profileToSave));
-    localStorage.setItem(`preroute_profile_${normalizedEmail}`, JSON.stringify(profileToSave));
+    localStorage.setItem(`preroute_profile_${email}`, JSON.stringify(profileToSave));
 
     try {
-      await setDoc(doc(db, "users", normalizedEmail), profileToSave, { merge: true });
+      if (email) {
+        await setDoc(doc(db, "users", email), profileToSave, { merge: true });
+      }
+      if (uid) {
+        await setDoc(doc(db, "users", uid), profileToSave, { merge: true });
+      }
     } catch (err) {
       console.warn("Could not save user profile to Firestore:", err);
     }

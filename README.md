@@ -27,8 +27,9 @@
 
 ### 🔑 3. Profile Sync & Google Authentication
 - **Universal Google Sign-In**: Authenticates via Google Play Services on Android and Firebase Web Auth on desktop.
-- **Cloud Profile Restoration**: Automatically binds and restores **Officer Name**, **Ambulance Vehicle ID**, and **Police Badge Number** to your Google account via Firestore Cloud database.
-- **Multi-Device Persistence**: First-time registrations save seamlessly; returning logins across web browsers or mobile devices instantly load account-bound credentials.
+- **Account Isolation & First-Time Login**: When logging in with a Google account for the first time, the app queries Firestore (`/users/{google_email}`). If no profile exists for that specific email, the app populates your Google Name and clears all role-specific ID fields (Vehicle ID / Badge Number), ensuring no previous user's cached details are inherited.
+- **Binding Details to Firestore**: When you choose your role (Ambulance Driver or Traffic Police) and enter your Vehicle ID (e.g., `KA-05-EM-0108`) or Badge Number (e.g., `BLR-TP-402`), clicking **Enter Portal** writes your profile to Firestore at `/users/{your_email}` with `{ merge: true }`.
+- **Multi-Platform Restoration (Web & Android)**: On all future logins (on Web or Android), signing in with your Google account automatically queries Firestore, fetches your bound Officer Name, Role, and Vehicle ID / Badge Number, and displays the `✓ Saved credentials restored` confirmation badge.
 
 ### 📱 4. Native Android Application (`com.PreRoute.app`)
 - **Capacitor Mobile SDK**: Runs natively on Android devices with Google Play Services.

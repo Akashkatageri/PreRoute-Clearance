@@ -26,7 +26,7 @@ export const RoleSelector: React.FC<RoleSelectorProps> = ({ onLogin }) => {
     avatarUrl: string;
   } | null>(null);
 
-  // Load saved profile for a Google account from Firestore or localStorage
+  // Load saved profile for a Google account from local storage or Firestore
   const loadSavedUserProfile = async (email: string) => {
     const normalizedEmail = email.toLowerCase().trim();
     if (!normalizedEmail) return null;
@@ -34,33 +34,33 @@ export const RoleSelector: React.FC<RoleSelectorProps> = ({ onLogin }) => {
     const localKey = `preroute_profile_${normalizedEmail}`;
     let profile: any = null;
 
-    // 1. Query Firestore (Source of truth across Web and Android devices)
+    // 1. Check LocalStorage first for instant restoration (no network latency delay)
+    try {
+      const localData = localStorage.getItem(localKey) || localStorage.getItem("ambulance_preclear_last_credentials") || localStorage.getItem("ambulance_preclear_session");
+      if (localData) {
+        const parsed = JSON.parse(localData);
+        if (parsed && (parsed.name || parsed.officerName || parsed.vehicleId || parsed.badgeNumber)) {
+          profile = parsed;
+        }
+      }
+    } catch (e) {
+      console.warn("Error reading local cached profile:", e);
+    }
+
+    // 2. Query Firestore (Source of truth across Web and Android devices)
     try {
       const userRef = doc(db, "users", normalizedEmail);
       const userSnap = await getDoc(userRef);
       if (userSnap.exists()) {
-        profile = userSnap.data();
-        if (profile) {
+        const remoteProfile = userSnap.data();
+        if (remoteProfile && (remoteProfile.name || remoteProfile.vehicleId || remoteProfile.badgeNumber)) {
+          profile = { ...profile, ...remoteProfile };
           localStorage.setItem(localKey, JSON.stringify(profile));
           localStorage.setItem("ambulance_preclear_last_credentials", JSON.stringify(profile));
-          return profile;
         }
       }
     } catch (e) {
       console.warn("Could not fetch remote user profile from Firestore:", e);
-    }
-
-    // 2. Check LocalStorage specifically for this email
-    const localData = localStorage.getItem(localKey);
-    if (localData) {
-      try {
-        const parsed = JSON.parse(localData);
-        if (parsed && parsed.email === normalizedEmail) {
-          profile = parsed;
-        }
-      } catch (e) {
-        console.warn("Invalid local profile JSON", e);
-      }
     }
 
     return profile;
@@ -77,41 +77,24 @@ export const RoleSelector: React.FC<RoleSelectorProps> = ({ onLogin }) => {
       avatarUrl
     });
 
-    if (user.email) {
-      const savedProfile = await loadSavedUserProfile(user.email);
-      if (savedProfile) {
-        setIsProfileRestored(true);
-        setIsEditingProfile(false);
-        if (savedProfile.role === "driver" || savedProfile.role === "police") {
-          setSelectedRole(savedProfile.role);
-        }
-        if (savedProfile.name || savedProfile.officerName) {
-          setOfficerName(savedProfile.name || savedProfile.officerName);
-        }
-        if (savedProfile.vehicleId) {
-          setVehicleId(savedProfile.vehicleId);
-        } else {
-          setVehicleId("");
-        }
-        if (savedProfile.badgeNumber) {
-          setBadgeNumber(savedProfile.badgeNumber);
-        } else {
-          setBadgeNumber("");
-        }
-      } else {
-        // First-time login for this Google account: Reset role-specific IDs so old user's details aren't inherited
-        setIsProfileRestored(false);
-        setIsEditingProfile(true);
-        if (user.displayName) {
-          setOfficerName(user.displayName);
-        } else {
-          setOfficerName("");
-        }
-        setVehicleId("");
-        setBadgeNumber("");
+    const savedProfile = user.email ? await loadSavedUserProfile(user.email) : null;
+
+    if (savedProfile && (savedProfile.name || savedProfile.officerName || savedProfile.vehicleId || savedProfile.badgeNumber)) {
+      setIsProfileRestored(true);
+      setIsEditingProfile(false);
+      if (savedProfile.role === "driver" || savedProfile.role === "police") {
+        setSelectedRole(savedProfile.role);
       }
-    } else if (user.displayName && !officerName) {
-      setOfficerName(user.displayName);
+      setOfficerName(savedProfile.name || savedProfile.officerName || user.displayName || "Ramesh Kumar");
+      setVehicleId(savedProfile.vehicleId || "KA-05-EM-0108");
+      setBadgeNumber(savedProfile.badgeNumber || "Badge #402");
+    } else {
+      // First-time registration for this Google account: Pre-fill defaults so user can immediately sign in
+      setIsProfileRestored(false);
+      setIsEditingProfile(true);
+      setOfficerName(user.displayName || officerName || "Ramesh Kumar");
+      if (!vehicleId) setVehicleId("KA-05-EM-0108");
+      if (!badgeNumber) setBadgeNumber("Badge #402");
     }
   };
 

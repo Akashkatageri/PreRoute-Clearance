@@ -54,17 +54,36 @@ class RealtimeSyncService {
         const existingTs = new Date(existing.lastUpdated || 0).getTime();
         const incomingTs = new Date(item.lastUpdated || 0).getTime();
 
+        const bestVehicleId =
+          item.vehicleId && item.vehicleId !== "AMBULANCE" && item.vehicleId !== "Hospital"
+            ? item.vehicleId
+            : (existing.vehicleId || item.vehicleId);
+
+        const bestDestName =
+          item.destinationName && item.destinationName !== "Hospital"
+            ? item.destinationName
+            : (existing.destinationName || item.destinationName);
+
+        const bestGeometry =
+          item.routeGeometry && item.routeGeometry.length > 0
+            ? item.routeGeometry
+            : (existing.routeGeometry || []);
+
         if (incomingTs >= existingTs) {
           map.set(item.id, {
             ...existing,
             ...item,
-            routeGeometry: (item.routeGeometry && item.routeGeometry.length > 0) ? item.routeGeometry : existing.routeGeometry
+            vehicleId: bestVehicleId,
+            destinationName: bestDestName,
+            routeGeometry: bestGeometry
           });
         } else {
           map.set(item.id, {
             ...item,
             ...existing,
-            routeGeometry: (existing.routeGeometry && existing.routeGeometry.length > 0) ? existing.routeGeometry : item.routeGeometry
+            vehicleId: bestVehicleId,
+            destinationName: bestDestName,
+            routeGeometry: bestGeometry
           });
         }
       }
@@ -153,6 +172,18 @@ class RealtimeSyncService {
               return;
             }
 
+            const rawGeometry = Array.isArray(raw.routeGeometry) ? raw.routeGeometry : [];
+            const normalizedGeometry: [number, number][] = rawGeometry
+              .map((pt: any): [number, number] => {
+                if (Array.isArray(pt) && pt.length >= 2) {
+                  return [Number(pt[0]), Number(pt[1])];
+                } else if (pt && typeof pt.lat === "number" && typeof pt.lng === "number") {
+                  return [Number(pt.lat), Number(pt.lng)];
+                }
+                return [0, 0];
+              })
+              .filter((pt): pt is [number, number] => pt[0] !== 0 || pt[1] !== 0);
+
             const emergencyItem: Emergency = {
               id: docId,
               vehicleId: (raw.vehicleId && raw.vehicleId.trim()) || docId || "AMBULANCE",
@@ -171,7 +202,7 @@ class RealtimeSyncService {
               createdAt: (raw.createdAt && raw.createdAt.trim()) || "Just now",
               createdTimestamp,
               lastUpdated: raw.lastUpdated || new Date().toISOString(),
-              routeGeometry: raw.routeGeometry || []
+              routeGeometry: normalizedGeometry
             };
 
             firestoreList.push(emergencyItem);
@@ -234,11 +265,24 @@ class RealtimeSyncService {
     // 1. Immediately update local cache & notify
     this.mergeEmergencies([newEmergency]);
 
-    // 2. Persist to Firestore cloud database
+    // 2. Persist to Firestore cloud database (Convert routeGeometry nested arrays to objects for Firestore compatibility)
     try {
-      // Clean document object to avoid Firestore undefined field errors
-      const docData = JSON.parse(JSON.stringify(newEmergency));
+      const firestoreRouteGeometry = (newEmergency.routeGeometry || []).map((pt: any) => {
+        if (Array.isArray(pt)) {
+          return { lat: Number(pt[0]), lng: Number(pt[1]) };
+        } else if (pt && typeof pt.lat === "number" && typeof pt.lng === "number") {
+          return { lat: Number(pt.lat), lng: Number(pt.lng) };
+        }
+        return { lat: 0, lng: 0 };
+      }).filter((pt) => pt.lat !== 0 || pt.lng !== 0);
+
+      const docData = {
+        ...JSON.parse(JSON.stringify(newEmergency)),
+        routeGeometry: firestoreRouteGeometry
+      };
+
       await setDoc(doc(db, "emergencies", id), docData);
+      console.log("Emergency successfully saved to Firestore:", id);
     } catch (e) {
       console.warn("Firestore setDoc create emergency error:", e);
     }
@@ -298,23 +342,23 @@ class RealtimeSyncService {
   }
 
   public async updateStatus(id: string, status: Emergency['status']): Promise<void> {
-    const payload = {
-      id,
-      status,
-      lastUpdated: new Date().toISOString()
-    };
+    const item = this.cache.find((e) => e.id === id);
+    const lastUpdated = new Date().toISOString();
+
+    const payload = item
+      ? { ...item, status, lastUpdated }
+      : { id, status, lastUpdated };
 
     // Update local cache state immediately
-    const item = this.cache.find((e) => e.id === id);
     if (item) {
       item.status = status;
-      item.lastUpdated = payload.lastUpdated;
+      item.lastUpdated = lastUpdated;
       this.notify();
     }
 
     // Persist to Firestore server database with merge
     try {
-      await setDoc(doc(db, "emergencies", id), payload, { merge: true });
+      await setDoc(doc(db, "emergencies", id), { status, lastUpdated }, { merge: true });
     } catch (e) {
       console.warn("Firestore updateStatus error:", e);
     }
@@ -324,7 +368,7 @@ class RealtimeSyncService {
       fetch(`/api/emergencies/${id}/status`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status })
+        body: JSON.stringify(payload)
       }).catch((e) => console.warn("API updateStatus error:", e));
     } catch (e) {
       console.warn("API updateStatus exception:", e);

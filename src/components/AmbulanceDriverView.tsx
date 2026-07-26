@@ -32,7 +32,10 @@ export const AmbulanceDriverView: React.FC<AmbulanceDriverViewProps> = ({
   userSession,
   onLogout
 }) => {
-  const [vehicleId, setVehicleId] = useState(userSession?.vehicleId || "");
+  const [vehicleId, setVehicleId] = useState(
+    (userSession?.vehicleId && userSession.vehicleId.trim()) || "KA-05-EM-0108"
+  );
+  const [createdEmergencyId, setCreatedEmergencyId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<HospitalResult[]>([]);
   const [selectedHospital, setSelectedHospital] = useState<HospitalResult | null>(null);
@@ -59,9 +62,10 @@ export const AmbulanceDriverView: React.FC<AmbulanceDriverViewProps> = ({
   const [toastSubtext, setToastSubtext] = useState("Traffic police have been notified with live road corridor.");
   const [showToast, setShowToast] = useState(false);
 
-  // Active Emergency for this vehicle (normalized case-insensitive matching with server)
+  // Active Emergency for this vehicle (prioritize createdEmergencyId, then vehicleId match)
   const activeEmergency = activeEmergencies.find((e) => {
     if (!e || e.status === "completed" || e.status === "cleared") return false;
+    if (createdEmergencyId && e.id === createdEmergencyId) return true;
     const normV = (vehicleId || "").trim().toUpperCase();
     const normEv = (e.vehicleId || "").trim().toUpperCase();
     if (normV && normEv) return normV === normEv;
@@ -321,7 +325,7 @@ export const AmbulanceDriverView: React.FC<AmbulanceDriverViewProps> = ({
     }
 
     try {
-      await realtimeService.createEmergency({
+      const created = await realtimeService.createEmergency({
         vehicleId,
         destinationName: targetHospital.name,
         destinationAddress: targetHospital.address,
@@ -337,6 +341,7 @@ export const AmbulanceDriverView: React.FC<AmbulanceDriverViewProps> = ({
         routeGeometry: currentRoute
       });
 
+      setCreatedEmergencyId(created.id);
       setToastMessage("EMERGENCY ROUTE STARTED! 🚨");
       setToastSubtext("Route corridor is now broadcasting live to all Traffic Police.");
       setShowToast(true);
@@ -353,6 +358,7 @@ export const AmbulanceDriverView: React.FC<AmbulanceDriverViewProps> = ({
     if (activeEmergency) {
       await realtimeService.updateStatus(activeEmergency.id, "completed");
     }
+    setCreatedEmergencyId(null);
     setSelectedHospital(null);
     setRouteGeometry([]);
     setEtaMinutes(null);

@@ -123,28 +123,21 @@ app.put("/api/emergencies/:id/location", (req, res) => {
   const { currentLat, currentLng, etaMinutes, distanceKm } = req.body;
 
   if (!emergencies[id]) {
-    emergencies[id] = {
-      id,
-      vehicleId: req.body.vehicleId || "AMBULANCE",
-      destinationName: req.body.destinationName || "Hospital",
-      destinationAddress: "Bengaluru",
-      destinationLat: 12.8715,
-      destinationLng: 77.5385,
-      startLat: currentLat || 12.8620,
-      startLng: currentLng || 77.5280,
-      currentLat: currentLat || 12.8620,
-      currentLng: currentLng || 77.5280,
-      priority: "critical",
-      status: "active",
-      etaMinutes: etaMinutes || 3,
-      distanceKm: distanceKm || 2.5,
-      createdAt: "Just now",
-      lastUpdated: new Date().toISOString()
-    };
+    if (req.body && req.body.vehicleId) {
+      emergencies[id] = {
+        ...req.body,
+        id,
+        currentLat: currentLat ?? req.body.currentLat,
+        currentLng: currentLng ?? req.body.currentLng,
+        lastUpdated: new Date().toISOString()
+      };
+    } else {
+      return res.status(404).json({ error: "Emergency not found" });
+    }
   } else {
     const emg = emergencies[id];
-    emg.currentLat = currentLat ?? emg.currentLat;
-    emg.currentLng = currentLng ?? emg.currentLng;
+    if (typeof currentLat === "number") emg.currentLat = currentLat;
+    if (typeof currentLng === "number") emg.currentLng = currentLng;
     if (etaMinutes !== undefined) emg.etaMinutes = etaMinutes;
     if (distanceKm !== undefined) emg.distanceKm = distanceKm;
     emg.lastUpdated = new Date().toISOString();
@@ -160,24 +153,16 @@ app.put("/api/emergencies/:id/status", (req, res) => {
   const { status } = req.body;
 
   if (!emergencies[id]) {
-    emergencies[id] = {
-      id,
-      vehicleId: req.body.vehicleId || "AMBULANCE",
-      destinationName: req.body.destinationName || "Hospital",
-      destinationAddress: "Bengaluru",
-      destinationLat: 12.8715,
-      destinationLng: 77.5385,
-      startLat: 12.8620,
-      startLng: 77.5280,
-      currentLat: 12.8620,
-      currentLng: 77.5280,
-      priority: "critical",
-      status: status || "acknowledged",
-      etaMinutes: 3,
-      distanceKm: 2.5,
-      createdAt: "Just now",
-      lastUpdated: new Date().toISOString()
-    };
+    if (req.body && req.body.vehicleId) {
+      emergencies[id] = {
+        ...req.body,
+        id,
+        status: status || req.body.status || "acknowledged",
+        lastUpdated: new Date().toISOString()
+      };
+    } else {
+      return res.status(404).json({ error: "Emergency not found" });
+    }
   } else {
     emergencies[id].status = status;
     emergencies[id].lastUpdated = new Date().toISOString();

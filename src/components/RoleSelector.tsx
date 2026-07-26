@@ -314,63 +314,63 @@ export const RoleSelector: React.FC<RoleSelectorProps> = ({ onLogin }) => {
   );
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col items-center justify-center p-4 sm:p-6 relative overflow-hidden">
+    <div className="min-h-screen bg-slate-100 text-slate-800 flex flex-col items-center justify-center p-4 sm:p-6 relative overflow-hidden">
       {/* Background Decorative Glow */}
-      <div className="absolute -top-40 -left-40 w-96 h-96 bg-red-600/15 rounded-full blur-3xl pointer-events-none" />
-      <div className="absolute -bottom-40 -right-40 w-96 h-96 bg-blue-600/15 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute -top-40 -left-40 w-96 h-96 bg-red-500/10 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute -bottom-40 -right-40 w-96 h-96 bg-blue-500/10 rounded-full blur-3xl pointer-events-none" />
 
       <div className="max-w-xl w-full relative z-10 flex flex-col items-center">
         {/* Header Branding */}
-        <div className="flex items-center gap-3 bg-slate-900/90 px-4 py-2 rounded-full border border-slate-800 mb-6 shadow-inner">
-          <ShieldAlert className="w-5 h-5 text-red-500 animate-pulse" />
-          <span className="text-xs font-black tracking-widest text-slate-300 uppercase">
+        <div className="flex items-center gap-3 bg-white/90 px-4 py-2 rounded-full border border-slate-200 mb-6 shadow-sm">
+          <ShieldAlert className="w-5 h-5 text-red-600 animate-pulse" />
+          <span className="text-xs font-black tracking-widest text-slate-700 uppercase">
             Emergency Pre-Clear Portal
           </span>
         </div>
 
-        <h1 className="text-3xl sm:text-4xl font-black text-white tracking-tight text-center mb-2">
-          Ambulance<span className="text-red-500">PreClear</span>
+        <h1 className="text-3xl sm:text-4xl font-black text-slate-900 tracking-tight text-center mb-2">
+          Ambulance<span className="text-red-600">PreClear</span>
         </h1>
-        <p className="text-slate-400 text-sm sm:text-base text-center mb-8 max-w-md">
+        <p className="text-slate-600 text-sm sm:text-base text-center mb-8 max-w-md font-medium">
           Google Authentication & Vehicle Registration Verification
         </p>
 
         {/* Login Card */}
         <form
           onSubmit={handleSubmit}
-          className="w-full bg-slate-900/90 backdrop-blur-xl p-6 sm:p-8 rounded-3xl border border-slate-800 shadow-2xl flex flex-col gap-6"
+          className="w-full bg-white p-6 sm:p-8 rounded-3xl border border-slate-200/80 shadow-2xl flex flex-col gap-6"
         >
           {/* STEP 1: Google Authentication */}
           <div className="flex flex-col gap-3">
             <div className="flex items-center justify-between">
-              <label className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+              <label className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
                 <span className="w-5 h-5 rounded-full bg-blue-600 text-white flex items-center justify-center text-[10px] font-black">1</span>
                 Google Account Authentication
               </label>
               {googleAccount && (
-                <span className="text-[11px] font-bold text-emerald-400 bg-emerald-950/80 border border-emerald-800/80 px-2.5 py-0.5 rounded-full flex items-center gap-1">
-                  <UserCheck className="w-3 h-3" /> Authenticated
+                <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full flex items-center gap-1">
+                  <UserCheck className="w-3 h-3 text-emerald-600" /> Authenticated
                 </span>
               )}
             </div>
 
             {googleAccount ? (
-              <div className="bg-slate-950/80 p-4 rounded-2xl border border-emerald-500/40 flex items-center justify-between gap-3 shadow-inner">
+              <div className="bg-slate-50 p-4 rounded-2xl border border-emerald-500/40 flex items-center justify-between gap-3 shadow-sm">
                 <div className="flex items-center gap-3 min-w-0">
                   <img
                     src={googleAccount.avatarUrl}
                     alt={googleAccount.name}
-                    className="w-11 h-11 rounded-full border-2 border-emerald-400/80 object-cover shrink-0"
+                    className="w-11 h-11 rounded-full border-2 border-emerald-500 object-cover shrink-0"
                   />
                   <div className="min-w-0">
-                    <div className="text-sm font-black text-white truncate">{googleAccount.name}</div>
-                    <div className="text-xs text-slate-400 truncate">{googleAccount.email}</div>
+                    <div className="text-sm font-black text-slate-900 truncate">{googleAccount.name}</div>
+                    <div className="text-xs text-slate-500 truncate">{googleAccount.email}</div>
                   </div>
                 </div>
                 <button
                   type="button"
                   onClick={handleSignOutGoogle}
-                  className="text-xs font-bold text-slate-400 hover:text-red-400 bg-slate-900 hover:bg-slate-800 border border-slate-700/80 px-3 py-2 rounded-xl transition-all flex items-center gap-1.5 shrink-0 cursor-pointer"
+                  className="text-xs font-bold text-slate-600 hover:text-red-600 bg-white hover:bg-slate-100 border border-slate-300 px-3 py-2 rounded-xl transition-all flex items-center gap-1.5 shrink-0 cursor-pointer shadow-sm"
                   title="Sign out of Google"
                 >
                   <LogOut className="w-3.5 h-3.5" />
@@ -383,7 +383,7 @@ export const RoleSelector: React.FC<RoleSelectorProps> = ({ onLogin }) => {
                   type="button"
                   onClick={handleGoogleSignIn}
                   disabled={isLoggingIn}
-                  className="w-full bg-slate-950 hover:bg-slate-900 text-white font-black py-4 px-5 rounded-2xl border border-blue-500/50 hover:border-blue-400 transition-all flex items-center justify-center gap-3 shadow-lg shadow-blue-950/40 cursor-pointer disabled:opacity-50"
+                  className="w-full bg-white hover:bg-slate-50 text-slate-800 font-bold py-3.5 px-5 rounded-2xl border border-slate-300 hover:border-slate-400 transition-all flex items-center justify-center gap-3 shadow-md hover:shadow-lg cursor-pointer disabled:opacity-50"
                   id="btn-google-signin"
                 >
                   <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24">
@@ -406,16 +406,16 @@ export const RoleSelector: React.FC<RoleSelectorProps> = ({ onLogin }) => {
                   </svg>
                   <span>{isLoggingIn ? "Connecting Google Account..." : "Continue with Google"}</span>
                 </button>
-                <p className="text-[11px] text-slate-400 text-center flex items-center justify-center gap-1">
-                  <Lock className="w-3 h-3 text-amber-400" />
+                <p className="text-[11px] text-slate-500 text-center flex items-center justify-center gap-1 font-medium">
+                  <Lock className="w-3 h-3 text-amber-600" />
                   Google Authentication is required to unlock portal access
                 </p>
               </div>
             )}
 
             {authError && (
-              <div className="bg-amber-500/10 border border-amber-500/30 p-2.5 rounded-xl text-amber-300 text-xs flex items-center gap-2">
-                <AlertCircle className="w-4 h-4 text-amber-400 shrink-0" />
+              <div className="bg-amber-50 border border-amber-200 p-2.5 rounded-xl text-amber-800 text-xs flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
                 <span>{authError}</span>
               </div>
             )}
@@ -423,22 +423,22 @@ export const RoleSelector: React.FC<RoleSelectorProps> = ({ onLogin }) => {
 
           {/* STEP 2: Portal Credentials Section */}
           <div className="flex flex-col gap-5 transition-all duration-300">
-            <label className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+            <label className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
               <span className="w-5 h-5 rounded-full bg-blue-600 text-white flex items-center justify-center text-[10px] font-black">2</span>
               Portal Role & Vehicle Credentials
             </label>
 
             {isProfileRestored && (
-              <div className="bg-emerald-500/10 border border-emerald-500/30 p-3 rounded-2xl text-emerald-300 text-xs flex items-center justify-between gap-2.5">
+              <div className="bg-emerald-50 border border-emerald-200 p-3 rounded-2xl text-emerald-800 text-xs flex items-center justify-between gap-2.5">
                 <div className="flex items-center gap-2 min-w-0">
-                  <UserCheck className="w-4 h-4 text-emerald-400 shrink-0" />
-                  <span className="truncate">Saved credentials restored ({selectedRole === "driver" ? vehicleId || "Ambulance" : badgeNumber || "Police"}).</span>
+                  <UserCheck className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span className="truncate font-medium">Saved credentials restored ({selectedRole === "driver" ? vehicleId || "Ambulance" : badgeNumber || "Police"}).</span>
                 </div>
                 {!isEditingProfile ? (
                   <button
                     type="button"
                     onClick={() => setIsEditingProfile(true)}
-                    className="text-[11px] font-bold text-amber-300 hover:text-amber-200 underline cursor-pointer shrink-0"
+                    className="text-[11px] font-bold text-amber-700 hover:text-amber-800 underline cursor-pointer shrink-0"
                   >
                     Edit Details
                   </button>
@@ -446,7 +446,7 @@ export const RoleSelector: React.FC<RoleSelectorProps> = ({ onLogin }) => {
                   <button
                     type="button"
                     onClick={() => setIsEditingProfile(false)}
-                    className="text-[11px] font-bold text-emerald-400 hover:text-emerald-300 underline cursor-pointer shrink-0"
+                    className="text-[11px] font-bold text-emerald-700 hover:text-emerald-800 underline cursor-pointer shrink-0"
                   >
                     Lock Fields
                   </button>
@@ -465,22 +465,22 @@ export const RoleSelector: React.FC<RoleSelectorProps> = ({ onLogin }) => {
                   isLocked ? "cursor-not-allowed opacity-80" : "cursor-pointer"
                 } ${
                   selectedRole === "driver"
-                    ? "bg-blue-600/20 border-blue-500 text-white shadow-lg ring-2 ring-blue-500/40"
-                    : "bg-slate-950/60 border-slate-800 text-slate-400 hover:border-slate-700"
+                    ? "bg-blue-50/80 border-blue-500 text-slate-900 shadow-md ring-2 ring-blue-500/30"
+                    : "bg-slate-50 border-slate-200 text-slate-600 hover:border-slate-300"
                 }`}
                 id="role-btn-driver"
               >
                 <div className="flex items-center justify-between w-full">
-                  <div className={`p-1.5 rounded-lg ${selectedRole === "driver" ? "bg-blue-500 text-white" : "bg-slate-800 text-slate-400"}`}>
+                  <div className={`p-1.5 rounded-lg ${selectedRole === "driver" ? "bg-blue-600 text-white" : "bg-slate-200 text-slate-600"}`}>
                     <Ambulance className="w-4 h-4" />
                   </div>
                   {selectedRole === "driver" && (
-                    isLocked ? <Lock className="w-4 h-4 text-emerald-400" /> : <CheckCircle2 className="w-4 h-4 text-blue-400" />
+                    isLocked ? <Lock className="w-4 h-4 text-emerald-600" /> : <CheckCircle2 className="w-4 h-4 text-blue-600" />
                   )}
                 </div>
                 <div>
-                  <h3 className="font-black text-xs text-white">Ambulance Driver</h3>
-                  <p className="text-[10px] text-slate-400 leading-tight">Emergency signal dispatch</p>
+                  <h3 className="font-black text-xs text-slate-900">Ambulance Driver</h3>
+                  <p className="text-[10px] text-slate-500 leading-tight">Emergency signal dispatch</p>
                 </div>
               </button>
 
@@ -493,32 +493,32 @@ export const RoleSelector: React.FC<RoleSelectorProps> = ({ onLogin }) => {
                   isLocked ? "cursor-not-allowed opacity-80" : "cursor-pointer"
                 } ${
                   selectedRole === "police"
-                    ? "bg-red-600/20 border-red-500 text-white shadow-lg ring-2 ring-red-500/40"
-                    : "bg-slate-950/60 border-slate-800 text-slate-400 hover:border-slate-700"
+                    ? "bg-red-50/80 border-red-500 text-slate-900 shadow-md ring-2 ring-red-500/30"
+                    : "bg-slate-50 border-slate-200 text-slate-600 hover:border-slate-300"
                 }`}
                 id="role-btn-police"
               >
                 <div className="flex items-center justify-between w-full">
-                  <div className={`p-1.5 rounded-lg ${selectedRole === "police" ? "bg-red-500 text-white" : "bg-slate-800 text-slate-400"}`}>
+                  <div className={`p-1.5 rounded-lg ${selectedRole === "police" ? "bg-red-600 text-white" : "bg-slate-200 text-slate-600"}`}>
                     <Shield className="w-4 h-4" />
                   </div>
                   {selectedRole === "police" && (
-                    isLocked ? <Lock className="w-4 h-4 text-emerald-400" /> : <CheckCircle2 className="w-4 h-4 text-red-400" />
+                    isLocked ? <Lock className="w-4 h-4 text-emerald-600" /> : <CheckCircle2 className="w-4 h-4 text-red-600" />
                   )}
                 </div>
                 <div>
-                  <h3 className="font-black text-xs text-white">Traffic Police</h3>
-                  <p className="text-[10px] text-slate-400 leading-tight">Radar & live signal control</p>
+                  <h3 className="font-black text-xs text-slate-900">Traffic Police</h3>
+                  <p className="text-[10px] text-slate-500 leading-tight">Radar & live signal control</p>
                 </div>
               </button>
             </div>
 
             {/* Officer Name Field */}
             <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1 flex items-center justify-between">
-                <span>Display / Officer Name <span className="text-red-400">*</span></span>
+              <label className="block text-xs font-semibold text-slate-700 mb-1 flex items-center justify-between">
+                <span>Display / Officer Name <span className="text-red-500">*</span></span>
                 {isLocked && (
-                  <span className="text-emerald-400 text-[11px] font-medium flex items-center gap-1">
+                  <span className="text-emerald-700 text-[11px] font-medium flex items-center gap-1">
                     <Lock className="w-3 h-3" /> Locked
                   </span>
                 )}
@@ -528,8 +528,8 @@ export const RoleSelector: React.FC<RoleSelectorProps> = ({ onLogin }) => {
                 value={officerName}
                 onChange={(e) => setOfficerName(e.target.value)}
                 placeholder={selectedRole === "driver" ? "e.g. Ramesh Kumar" : "e.g. Inspector Vijay"}
-                className={`w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-blue-500 ${
-                  isLocked ? "bg-slate-950/80 cursor-not-allowed text-slate-300" : ""
+                className={`w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:bg-white focus:border-blue-500 ${
+                  isLocked ? "bg-slate-100 cursor-not-allowed text-slate-600 border-slate-200" : ""
                 }`}
                 disabled={isLocked}
                 readOnly={isLocked}
@@ -539,19 +539,19 @@ export const RoleSelector: React.FC<RoleSelectorProps> = ({ onLogin }) => {
             {/* Role Specific Vehicle / Badge Field */}
             {selectedRole === "driver" ? (
               <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1 flex items-center justify-between">
-                  <span>Ambulance Registration Vehicle ID <span className="text-red-400">*</span></span>
+                <label className="block text-xs font-semibold text-slate-700 mb-1 flex items-center justify-between">
+                  <span>Ambulance Registration Vehicle ID <span className="text-red-500">*</span></span>
                   {isLocked ? (
-                    <span className="text-emerald-400 text-[11px] font-medium flex items-center gap-1">
+                    <span className="text-emerald-700 text-[11px] font-medium flex items-center gap-1">
                       <Lock className="w-3 h-3" /> Locked
                     </span>
                   ) : vehicleId.trim() && (
                     isVehicleValid ? (
-                      <span className="text-emerald-400 text-[11px] font-bold flex items-center gap-1">
-                        <CheckCircle2 className="w-3 h-3" /> Valid Vehicle ID
+                      <span className="text-emerald-700 text-[11px] font-bold flex items-center gap-1">
+                        <CheckCircle2 className="w-3 h-3 text-emerald-600" /> Valid Vehicle ID
                       </span>
                     ) : (
-                      <span className="text-amber-400 text-[11px] font-semibold">
+                      <span className="text-amber-700 text-[11px] font-semibold">
                         4 Digits Required at End
                       </span>
                     )
@@ -563,29 +563,29 @@ export const RoleSelector: React.FC<RoleSelectorProps> = ({ onLogin }) => {
                   onChange={(e) => setVehicleId(sanitizeVehicleInput(e.target.value))}
                   maxLength={13}
                   placeholder="KA-05-EM-0108"
-                  className={`w-full bg-slate-950 border rounded-xl px-3.5 py-2.5 text-sm text-white placeholder-slate-600 focus:outline-none font-mono uppercase transition-colors ${
+                  className={`w-full bg-slate-50 border rounded-xl px-3.5 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:bg-white font-mono uppercase transition-colors ${
                     isLocked
-                      ? "border-slate-800 bg-slate-950/80 cursor-not-allowed text-slate-300"
+                      ? "border-slate-200 bg-slate-100 cursor-not-allowed text-slate-600"
                       : vehicleId.trim()
                       ? isVehicleValid
-                        ? "border-emerald-500/80 focus:border-emerald-400"
-                        : "border-amber-500/80 focus:border-amber-400"
-                      : "border-slate-800 focus:border-blue-500"
+                        ? "border-emerald-500 focus:border-emerald-600"
+                        : "border-amber-500 focus:border-amber-600"
+                      : "border-slate-300 focus:border-blue-500"
                   }`}
                   disabled={isLocked}
                   readOnly={isLocked}
                   required
                 />
-                <p className="text-[11px] text-slate-400 mt-1">
-                  Format: 2 Letters + 2 Digits + 1-2 Letters + 4 Digits (e.g. <span className="text-slate-300 font-mono">KA-05-EM-0108</span>)
+                <p className="text-[11px] text-slate-500 mt-1">
+                  Format: 2 Letters + 2 Digits + 1-2 Letters + 4 Digits (e.g. <span className="text-slate-700 font-mono">KA-05-EM-0108</span>)
                 </p>
               </div>
             ) : (
               <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1 flex items-center justify-between">
-                  <span>Traffic Control Badge / Inspector ID <span className="text-red-400">*</span></span>
+                <label className="block text-xs font-semibold text-slate-700 mb-1 flex items-center justify-between">
+                  <span>Traffic Control Badge / Inspector ID <span className="text-red-500">*</span></span>
                   {isLocked && (
-                    <span className="text-emerald-400 text-[11px] font-medium flex items-center gap-1">
+                    <span className="text-emerald-700 text-[11px] font-medium flex items-center gap-1">
                       <Lock className="w-3 h-3" /> Locked
                     </span>
                   )}
@@ -595,8 +595,8 @@ export const RoleSelector: React.FC<RoleSelectorProps> = ({ onLogin }) => {
                   value={badgeNumber}
                   onChange={(e) => setBadgeNumber(e.target.value)}
                   placeholder="BLR-TP-402"
-                  className={`w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-red-500 font-mono ${
-                    isLocked ? "bg-slate-950/80 cursor-not-allowed text-slate-300" : ""
+                  className={`w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:bg-white focus:border-red-500 font-mono ${
+                    isLocked ? "bg-slate-100 cursor-not-allowed text-slate-600 border-slate-200" : ""
                   }`}
                   disabled={isLocked}
                   readOnly={isLocked}
@@ -611,12 +611,12 @@ export const RoleSelector: React.FC<RoleSelectorProps> = ({ onLogin }) => {
             <button
               type="submit"
               disabled={!isFormValid}
-              className={`w-full font-black text-base py-4 px-6 rounded-2xl shadow-xl transition-all flex items-center justify-center gap-2 uppercase tracking-wider ${
+              className={`w-full font-black text-base py-4 px-6 rounded-2xl shadow-lg transition-all flex items-center justify-center gap-2 uppercase tracking-wider ${
                 !isFormValid
-                  ? "bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700/60"
+                  ? "bg-slate-200 text-slate-400 cursor-not-allowed border border-slate-300"
                   : selectedRole === "driver"
-                  ? "bg-blue-600 hover:bg-blue-500 text-white shadow-blue-600/30 cursor-pointer"
-                  : "bg-red-600 hover:bg-red-500 text-white shadow-red-600/30 cursor-pointer"
+                  ? "bg-blue-600 hover:bg-blue-700 text-white shadow-blue-600/30 cursor-pointer"
+                  : "bg-red-600 hover:bg-red-700 text-white shadow-red-600/30 cursor-pointer"
               }`}
               id="btn-enter-portal"
             >
@@ -626,19 +626,19 @@ export const RoleSelector: React.FC<RoleSelectorProps> = ({ onLogin }) => {
             </button>
 
             {!isFormValid && (
-              <div className="bg-slate-950/80 border border-slate-800 p-3 rounded-xl text-slate-400 text-xs flex flex-col gap-1.5">
-                <span className="font-bold text-slate-300 flex items-center gap-1.5">
-                  <AlertCircle className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+              <div className="bg-slate-50 border border-slate-200 p-3 rounded-xl text-slate-600 text-xs flex flex-col gap-1.5">
+                <span className="font-bold text-slate-800 flex items-center gap-1.5">
+                  <AlertCircle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
                   To enter the portal:
                 </span>
-                <ul className="list-disc list-inside text-[11px] space-y-0.5 text-slate-400 pl-1">
+                <ul className="list-disc list-inside text-[11px] space-y-0.5 text-slate-600 pl-1">
                   {!googleAccount && <li>Sign in with Google above</li>}
                   {googleAccount && !officerName.trim() && <li>Enter Display / Officer Name</li>}
                   {googleAccount && selectedRole === "driver" && (
                     !vehicleId.trim() ? (
                       <li>Enter Ambulance Registration Vehicle ID</li>
                     ) : !isVehicleValid ? (
-                      <li className="text-amber-400 font-medium">
+                      <li className="text-amber-700 font-medium">
                         Vehicle ID must end with 4 digits (e.g. KA-05-EM-0108)
                       </li>
                     ) : null
@@ -651,8 +651,8 @@ export const RoleSelector: React.FC<RoleSelectorProps> = ({ onLogin }) => {
             )}
           </div>
 
-          <div className="text-center text-[11px] text-slate-400 flex items-center justify-center gap-1.5">
-            <Radio className="w-3.5 h-3.5 text-emerald-400 animate-pulse" />
+          <div className="text-center text-[11px] text-slate-500 flex items-center justify-center gap-1.5 font-medium">
+            <Radio className="w-3.5 h-3.5 text-emerald-600 animate-pulse" />
             <span>Capacitor Mobile Native App Ready (Android GPS & Push Enabled)</span>
           </div>
         </form>

@@ -54,36 +54,17 @@ class RealtimeSyncService {
         const existingTs = new Date(existing.lastUpdated || 0).getTime();
         const incomingTs = new Date(item.lastUpdated || 0).getTime();
 
-        const bestVehicleId =
-          item.vehicleId && item.vehicleId !== "AMBULANCE" && item.vehicleId !== "Hospital"
-            ? item.vehicleId
-            : (existing.vehicleId || item.vehicleId);
-
-        const bestDestName =
-          item.destinationName && item.destinationName !== "Hospital"
-            ? item.destinationName
-            : (existing.destinationName || item.destinationName);
-
-        const bestGeometry =
-          item.routeGeometry && item.routeGeometry.length > 0
-            ? item.routeGeometry
-            : (existing.routeGeometry || []);
-
         if (incomingTs >= existingTs) {
           map.set(item.id, {
             ...existing,
             ...item,
-            vehicleId: bestVehicleId,
-            destinationName: bestDestName,
-            routeGeometry: bestGeometry
+            routeGeometry: (item.routeGeometry && item.routeGeometry.length > 0) ? item.routeGeometry : existing.routeGeometry
           });
         } else {
           map.set(item.id, {
             ...item,
             ...existing,
-            vehicleId: bestVehicleId,
-            destinationName: bestDestName,
-            routeGeometry: bestGeometry
+            routeGeometry: (existing.routeGeometry && existing.routeGeometry.length > 0) ? existing.routeGeometry : item.routeGeometry
           });
         }
       }
@@ -342,23 +323,23 @@ class RealtimeSyncService {
   }
 
   public async updateStatus(id: string, status: Emergency['status']): Promise<void> {
-    const item = this.cache.find((e) => e.id === id);
-    const lastUpdated = new Date().toISOString();
-
-    const payload = item
-      ? { ...item, status, lastUpdated }
-      : { id, status, lastUpdated };
+    const payload = {
+      id,
+      status,
+      lastUpdated: new Date().toISOString()
+    };
 
     // Update local cache state immediately
+    const item = this.cache.find((e) => e.id === id);
     if (item) {
       item.status = status;
-      item.lastUpdated = lastUpdated;
+      item.lastUpdated = payload.lastUpdated;
       this.notify();
     }
 
     // Persist to Firestore server database with merge
     try {
-      await setDoc(doc(db, "emergencies", id), { status, lastUpdated }, { merge: true });
+      await setDoc(doc(db, "emergencies", id), payload, { merge: true });
     } catch (e) {
       console.warn("Firestore updateStatus error:", e);
     }
@@ -368,7 +349,7 @@ class RealtimeSyncService {
       fetch(`/api/emergencies/${id}/status`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload)
+        body: JSON.stringify({ status })
       }).catch((e) => console.warn("API updateStatus error:", e));
     } catch (e) {
       console.warn("API updateStatus exception:", e);

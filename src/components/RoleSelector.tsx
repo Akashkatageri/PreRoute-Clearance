@@ -85,16 +85,24 @@ export const RoleSelector: React.FC<RoleSelectorProps> = ({ onLogin }) => {
       if (savedProfile.role === "driver" || savedProfile.role === "police") {
         setSelectedRole(savedProfile.role);
       }
-      setOfficerName(savedProfile.name || savedProfile.officerName || user.displayName || "Ramesh Kumar");
-      setVehicleId(savedProfile.vehicleId || "KA-05-EM-0108");
-      setBadgeNumber(savedProfile.badgeNumber || "Badge #402");
+      if (savedProfile.name || savedProfile.officerName) {
+        setOfficerName(savedProfile.name || savedProfile.officerName);
+      } else if (user.displayName) {
+        setOfficerName(user.displayName);
+      }
+      if (savedProfile.vehicleId) {
+        setVehicleId(savedProfile.vehicleId);
+      }
+      if (savedProfile.badgeNumber) {
+        setBadgeNumber(savedProfile.badgeNumber);
+      }
     } else {
-      // First-time registration for this Google account: Pre-fill defaults so user can immediately sign in
+      // First-time registration for this Google account: Pre-fill Google display name
       setIsProfileRestored(false);
       setIsEditingProfile(true);
-      setOfficerName(user.displayName || officerName || "Ramesh Kumar");
-      if (!vehicleId) setVehicleId("KA-05-EM-0108");
-      if (!badgeNumber) setBadgeNumber("Badge #402");
+      if (user.displayName && !officerName) {
+        setOfficerName(user.displayName);
+      }
     }
   };
 

@@ -66,8 +66,8 @@ export const RoleSelector: React.FC<RoleSelectorProps> = ({ onLogin }) => {
     return profile;
   };
 
-  // Helper to apply user profile data to form state
-  const applyGoogleUserAndProfile = async (user: any) => {
+  // Helper to apply user profile data to form state and auto-enter portal for registered accounts
+  const applyGoogleUserAndProfile = async (user: any, autoNavigate = true) => {
     const email = (user.email || "").toLowerCase().trim() || `${selectedRole}@preclear.gov.in`;
     const avatarUrl = user.photoURL || `https://api.dicebear.com/7.x/bottts/svg?seed=${user.uid || email}`;
 
@@ -79,25 +79,55 @@ export const RoleSelector: React.FC<RoleSelectorProps> = ({ onLogin }) => {
 
     const savedProfile = user.email ? await loadSavedUserProfile(user.email) : null;
 
-    if (savedProfile && (savedProfile.name || savedProfile.officerName || savedProfile.vehicleId || savedProfile.badgeNumber)) {
+    if (savedProfile && (savedProfile.role === "driver" || savedProfile.role === "police") && (savedProfile.name || savedProfile.officerName)) {
+      const pRole = savedProfile.role as "driver" | "police";
+      const pName = (savedProfile.name || savedProfile.officerName || user.displayName || "Officer").trim();
+      const pVehicleId = (savedProfile.vehicleId || "").trim();
+      const pBadgeNumber = (savedProfile.badgeNumber || "").trim();
+
+      const isRegistered = pRole === "driver" ? isValidVehicleId(pVehicleId) : pBadgeNumber !== "";
+
+      setSelectedRole(pRole);
+      setOfficerName(pName);
+      if (pVehicleId) setVehicleId(pVehicleId);
+      if (pBadgeNumber) setBadgeNumber(pBadgeNumber);
       setIsProfileRestored(true);
-      setIsEditingProfile(false);
-      if (savedProfile.role === "driver" || savedProfile.role === "police") {
-        setSelectedRole(savedProfile.role);
-      }
-      if (savedProfile.name || savedProfile.officerName) {
-        setOfficerName(savedProfile.name || savedProfile.officerName);
-      } else if (user.displayName) {
-        setOfficerName(user.displayName);
-      }
-      if (savedProfile.vehicleId) {
-        setVehicleId(savedProfile.vehicleId);
-      }
-      if (savedProfile.badgeNumber) {
-        setBadgeNumber(savedProfile.badgeNumber);
+
+      // Existing registered account: Bypasses registration screen and automatically opens portal
+      if (isRegistered && autoNavigate) {
+        const session: UserSession = {
+          id: `usr_${Date.now()}`,
+          name: pName,
+          email,
+          avatarUrl,
+          role: pRole,
+          vehicleId: pRole === "driver" ? pVehicleId : undefined,
+          badgeNumber: pRole === "police" ? pBadgeNumber : undefined,
+          loginProvider: "google",
+          loggedAt: new Date().toISOString()
+        };
+
+        const profileToSave = {
+          email,
+          name: pName,
+          avatarUrl,
+          role: pRole,
+          vehicleId: pRole === "driver" ? pVehicleId : undefined,
+          badgeNumber: pRole === "police" ? pBadgeNumber : undefined,
+          updatedAt: new Date().toISOString()
+        };
+
+        localStorage.setItem("ambulance_preclear_session", JSON.stringify(session));
+        localStorage.setItem("ambulance_preclear_last_credentials", JSON.stringify(profileToSave));
+        localStorage.setItem(`preroute_profile_${email}`, JSON.stringify(profileToSave));
+
+        NotificationService.requestAllPermissions().catch(() => {});
+
+        onLogin(session);
+        return;
       }
     } else {
-      // First-time registration for this Google account: Pre-fill Google display name
+      // First-time registration for a new Google account: Show 1-time setup form
       setIsProfileRestored(false);
       setIsEditingProfile(true);
       if (user.displayName && !officerName) {

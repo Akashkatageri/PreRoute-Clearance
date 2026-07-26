@@ -55,16 +55,16 @@ export class NotificationService {
     if (typeof window === "undefined") return false;
 
     // 1. Native Capacitor Geolocation permission
-    if (Capacitor.isPluginAvailable("Geolocation")) {
-      try {
+    try {
+      if (Capacitor.isNativePlatform() || Capacitor.isPluginAvailable("Geolocation")) {
         const status = await Geolocation.requestPermissions();
         if (status.location === "granted" || status.coarseLocation === "granted") {
           this.locationPermissionGranted = true;
           return true;
         }
-      } catch (err) {
-        console.warn("Capacitor Geolocation request permission error:", err);
       }
+    } catch (err) {
+      console.warn("Capacitor Geolocation request permission error:", err);
     }
 
     // 2. Web Geolocation API

@@ -152,4 +152,31 @@ function patchStringsXml() {
   }
 }
 
-patchStringsXml();
+// 5. Patch AndroidManifest.xml to ensure location & notification permissions are declared
+function patchAndroidManifest() {
+  const manifestPath = path.join(process.cwd(), 'android', 'app', 'src', 'main', 'AndroidManifest.xml');
+  const requiredPermissions = [
+    '<uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />',
+    '<uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />',
+    '<uses-permission android:name="android.permission.POST_NOTIFICATIONS" />'
+  ];
+
+  if (fs.existsSync(manifestPath)) {
+    let content = fs.readFileSync(manifestPath, 'utf8');
+    let updated = false;
+
+    for (const perm of requiredPermissions) {
+      if (!content.includes(perm)) {
+        content = content.replace('</manifest>', `    ${perm}\n</manifest>`);
+        updated = true;
+      }
+    }
+
+    if (updated) {
+      fs.writeFileSync(manifestPath, content, 'utf8');
+      console.log('✅ Added missing location and notification permissions to AndroidManifest.xml');
+    }
+  }
+}
+
+patchAndroidManifest();

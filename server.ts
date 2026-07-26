@@ -36,6 +36,11 @@ const TWELVE_HOURS_MS = 12 * 60 * 60 * 1000;
 function purgeExpiredEmergencies() {
   const now = Date.now();
   for (const id of Object.keys(emergencies)) {
+    if (id === "EMG-537" || emergencies[id]?.vehicleId === "EMG-537") {
+      delete emergencies[id];
+      broadcastUpdate("EMERGENCY_DELETED", { id });
+      continue;
+    }
     const emg = emergencies[id];
     const createdTime = emg.createdTimestamp || (emg.lastUpdated ? new Date(emg.lastUpdated).getTime() : now);
     if (now - createdTime > TWELVE_HOURS_MS) {

@@ -38,7 +38,7 @@ export const TrafficPoliceView: React.FC<TrafficPoliceViewProps> = ({
 
   // Active non-completed and non-cleared emergencies with guaranteed field fallbacks
   const activeList = emergencies
-    .filter((e) => e && e.status !== "completed" && e.status !== "cleared")
+    .filter((e) => e && e.status !== "completed" && e.status !== "cleared" && e.id !== "EMG-537" && e.vehicleId !== "EMG-537")
     .map((e) => {
       const vId = (e.vehicleId && e.vehicleId.trim()) || e.id || "AMBULANCE";
       const dName = (e.destinationName && e.destinationName.trim()) || "Hospital";

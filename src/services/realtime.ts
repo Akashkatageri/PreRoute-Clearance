@@ -9,6 +9,7 @@ class RealtimeSyncService {
   private cache: Emergency[] = [];
 
   constructor() {
+    this.deleteEmergency("EMG-537");
     this.initFirestoreListener();
     this.initServerSSEAndPolling();
     this.startExpirationCheck();
@@ -36,14 +37,19 @@ class RealtimeSyncService {
     const now = Date.now();
     const map = new Map<string, Emergency>();
 
+    // Clean out fake emergencies like EMG-537
+    this.cache = this.cache.filter((e) => e && e.id !== "EMG-537" && e.vehicleId !== "EMG-537");
+
     // Preserve existing cache items
     for (const emg of this.cache) {
-      if (emg && emg.id) map.set(emg.id, emg);
+      if (emg && emg.id && emg.id !== "EMG-537" && emg.vehicleId !== "EMG-537") {
+        map.set(emg.id, emg);
+      }
     }
 
     // Merge incoming new items
     for (const item of newList) {
-      if (!item || !item.id) continue;
+      if (!item || !item.id || item.id === "EMG-537" || item.vehicleId === "EMG-537") continue;
       const createdTs = item.createdTimestamp || (item.lastUpdated ? new Date(item.lastUpdated).getTime() : now);
       if (now - createdTs > TWELVE_HOURS_MS) continue;
 
@@ -71,7 +77,7 @@ class RealtimeSyncService {
     }
 
     const mergedList = Array.from(map.values()).filter((e) => {
-      if (!e || e.status === "completed" || e.status === "cleared") return false;
+      if (!e || e.status === "completed" || e.status === "cleared" || e.id === "EMG-537" || e.vehicleId === "EMG-537") return false;
       const createdTs = e.createdTimestamp || (e.lastUpdated ? new Date(e.lastUpdated).getTime() : now);
       return now - createdTs <= TWELVE_HOURS_MS;
     });
@@ -143,6 +149,14 @@ class RealtimeSyncService {
           const docId = raw.id || docSnap.id;
 
           if (docId) {
+            // Delete EMG-537 or fake sample test docs from Firestore permanently
+            if (docId === "EMG-537" || raw.vehicleId === "EMG-537") {
+              deleteDoc(doc(db, "emergencies", docId)).catch(() => {});
+              this.cache = this.cache.filter((e) => e && e.id !== docId && e.vehicleId !== "EMG-537");
+              this.notify();
+              return;
+            }
+
             const rawCreatedTimestamp = typeof raw.createdTimestamp === "number" ? raw.createdTimestamp : (raw.lastUpdated ? new Date(raw.lastUpdated).getTime() : Date.now());
             const createdTimestamp = isNaN(rawCreatedTimestamp) || rawCreatedTimestamp <= 0 ? Date.now() : rawCreatedTimestamp;
             const ageMs = Date.now() - createdTimestamp;

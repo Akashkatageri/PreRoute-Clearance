@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Siren, X, Search, Clock, Navigation, CheckCircle, ArrowLeft, LogOut, ShieldCheck } from "lucide-react";
+import { Capacitor } from "@capacitor/core";
+import { Geolocation } from "@capacitor/geolocation";
 import { Emergency, HospitalResult, Priority, Role, UserSession } from "../types";
 import { searchHospitals, calculateGeoapifyRoute, DEFAULT_BANGALORE_HOSPITALS } from "../services/geoapify";
 import { realtimeService } from "../services/realtime";
@@ -170,13 +172,37 @@ export const AmbulanceDriverView: React.FC<AmbulanceDriverViewProps> = ({
   }, [currentPos.lat, currentPos.lng, activeEmergency?.id]);
 
   // Get current device physical location via Geolocation API
-  const handleDetectGPS = () => {
+  const handleDetectGPS = async () => {
+    setGpsError(null);
+
+    // Try Capacitor native Geolocation first if running on native mobile/Capacitor
+    if (Capacitor.isNativePlatform() || Capacitor.isPluginAvailable("Geolocation")) {
+      try {
+        const perm = await Geolocation.requestPermissions();
+        if (perm.location === "granted" || perm.coarseLocation === "granted") {
+          const pos = await Geolocation.getCurrentPosition({ enableHighAccuracy: true });
+          const lat = pos.coords.latitude;
+          const lng = pos.coords.longitude;
+          setStartPos({ lat, lng });
+          setCurrentPos({ lat, lng });
+          setGpsAccuracy(Math.round(pos.coords.accuracy || 10));
+          setGpsSpeed(pos.coords.speed ? Math.round(pos.coords.speed * 3.6) : 0);
+
+          if (selectedHospital) {
+            handleCalculateRoute(selectedHospital, { lat, lng });
+          }
+          return;
+        }
+      } catch (err) {
+        console.warn("Capacitor native location error:", err);
+      }
+    }
+
     if (!("geolocation" in navigator)) {
       setGpsError("Geolocation is not supported by your browser");
       return;
     }
 
-    setGpsError(null);
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         const lat = pos.coords.latitude;

@@ -10,12 +10,12 @@ class RealtimeSyncService {
 
   constructor() {
     this.initFirestoreListener();
+    this.initServerSSEAndPolling();
     this.startExpirationCheck();
   }
 
   private startExpirationCheck() {
     if (typeof window === "undefined") return;
-    // Check every 30 seconds for emergencies older than 12 hours
     setInterval(() => {
       const TWELVE_HOURS_MS = 12 * 60 * 60 * 1000;
       const now = Date.now();
@@ -28,6 +28,107 @@ class RealtimeSyncService {
         this.deleteEmergency(expired.id);
       }
     }, 30000);
+  }
+
+  // Merge list from Firestore or Express Server without wiping out locally active emergencies
+  private mergeEmergencies(newList: Emergency[]) {
+    const TWELVE_HOURS_MS = 12 * 60 * 60 * 1000;
+    const now = Date.now();
+    const map = new Map<string, Emergency>();
+
+    // Preserve existing cache items
+    for (const emg of this.cache) {
+      if (emg && emg.id) map.set(emg.id, emg);
+    }
+
+    // Merge incoming new items
+    for (const item of newList) {
+      if (!item || !item.id) continue;
+      const createdTs = item.createdTimestamp || (item.lastUpdated ? new Date(item.lastUpdated).getTime() : now);
+      if (now - createdTs > TWELVE_HOURS_MS) continue;
+
+      const existing = map.get(item.id);
+      if (!existing) {
+        map.set(item.id, item);
+      } else {
+        const existingTs = new Date(existing.lastUpdated || 0).getTime();
+        const incomingTs = new Date(item.lastUpdated || 0).getTime();
+
+        if (incomingTs >= existingTs) {
+          map.set(item.id, {
+            ...existing,
+            ...item,
+            routeGeometry: (item.routeGeometry && item.routeGeometry.length > 0) ? item.routeGeometry : existing.routeGeometry
+          });
+        } else {
+          map.set(item.id, {
+            ...item,
+            ...existing,
+            routeGeometry: (existing.routeGeometry && existing.routeGeometry.length > 0) ? existing.routeGeometry : item.routeGeometry
+          });
+        }
+      }
+    }
+
+    const mergedList = Array.from(map.values()).filter((e) => {
+      if (!e || e.status === "completed" || e.status === "cleared") return false;
+      const createdTs = e.createdTimestamp || (e.lastUpdated ? new Date(e.lastUpdated).getTime() : now);
+      return now - createdTs <= TWELVE_HOURS_MS;
+    });
+
+    this.cache = mergedList;
+    this.notify();
+  }
+
+  private initServerSSEAndPolling() {
+    if (typeof window === "undefined") return;
+
+    // 1. Initial fetch & periodic 2.5s polling from Express backend
+    const fetchExpressEmergencies = async () => {
+      try {
+        const res = await fetch("/api/emergencies");
+        if (res.ok) {
+          const list = await res.json();
+          if (Array.isArray(list)) {
+            this.mergeEmergencies(list);
+          }
+        }
+      } catch (e) {
+        // Quiet notice for polling
+      }
+    };
+
+    fetchExpressEmergencies();
+    setInterval(fetchExpressEmergencies, 2500);
+
+    // 2. Real-time Server-Sent Events (SSE) Stream
+    try {
+      const eventSource = new EventSource("/api/emergencies/stream");
+      eventSource.onmessage = (event) => {
+        try {
+          const parsed = JSON.parse(event.data);
+          if (parsed.type === "INIT" && Array.isArray(parsed.data)) {
+            this.mergeEmergencies(parsed.data);
+          } else if (parsed.type === "EMERGENCY_CREATED" && parsed.data) {
+            this.mergeEmergencies([parsed.data]);
+          } else if (parsed.type === "LOCATION_UPDATED" && parsed.data) {
+            this.mergeEmergencies([parsed.data]);
+          } else if (parsed.type === "STATUS_UPDATED" && parsed.data) {
+            this.mergeEmergencies([parsed.data]);
+          } else if (parsed.type === "EMERGENCY_DELETED" && parsed.data?.id) {
+            this.cache = this.cache.filter((e) => e.id !== parsed.data.id);
+            this.notify();
+          }
+        } catch (e) {
+          console.warn("SSE parse notice:", e);
+        }
+      };
+      eventSource.onerror = () => {
+        // SSE reconnect handles automatically
+      };
+    } catch (e) {
+      console.warn("SSE setup notice:", e);
+    }
   }
 
   private initFirestoreListener() {
@@ -48,7 +149,6 @@ class RealtimeSyncService {
             const TWELVE_HOURS_MS = 12 * 60 * 60 * 1000;
 
             if (ageMs > TWELVE_HOURS_MS) {
-              // Automatically expire emergency from Firestore after 12 hours
               deleteDoc(doc(db, "emergencies", docId)).catch(() => {});
               return;
             }
@@ -78,9 +178,7 @@ class RealtimeSyncService {
           }
         });
 
-        // Always update cache and notify, even if list is empty (cleared/completed)
-        this.cache = firestoreList;
-        this.notify();
+        this.mergeEmergencies(firestoreList);
       }, (error) => {
         console.warn("Firestore onSnapshot realtime listener notice:", error);
       });
@@ -91,8 +189,7 @@ class RealtimeSyncService {
 
   public subscribe(listener: Listener): () => void {
     this.listeners.add(listener);
-    // Notify subscriber immediately with current cloud cache
-    listener(this.cache);
+    listener([...this.cache]);
     return () => {
       this.listeners.delete(listener);
     };
@@ -115,7 +212,7 @@ class RealtimeSyncService {
 
     const newEmergency: Emergency = {
       id,
-      vehicleId: emergencyData.vehicleId || "AMBULANCE-108",
+      vehicleId: (emergencyData.vehicleId && emergencyData.vehicleId.trim()) || "KA-05-EM-0108",
       destinationName: emergencyData.destinationName || "General Hospital",
       destinationAddress: emergencyData.destinationAddress || "Hospital Address",
       destinationLat: emergencyData.destinationLat || 12.8715,
@@ -134,14 +231,19 @@ class RealtimeSyncService {
       routeGeometry: emergencyData.routeGeometry || []
     };
 
-    // 1. Immediately persist to Firestore cloud database (guarantees cross-device sync web <-> android)
+    // 1. Immediately update local cache & notify
+    this.mergeEmergencies([newEmergency]);
+
+    // 2. Persist to Firestore cloud database
     try {
-      await setDoc(doc(db, "emergencies", id), newEmergency);
+      // Clean document object to avoid Firestore undefined field errors
+      const docData = JSON.parse(JSON.stringify(newEmergency));
+      await setDoc(doc(db, "emergencies", id), docData);
     } catch (e) {
       console.warn("Firestore setDoc create emergency error:", e);
     }
 
-    // 2. Also send to Express server API route
+    // 3. Send to Express server API route
     try {
       await fetch("/api/emergencies", {
         method: "POST",
@@ -151,15 +253,6 @@ class RealtimeSyncService {
     } catch (e) {
       console.warn("API createEmergency fetch error:", e);
     }
-
-    // 3. Update local cache
-    const existingIdx = this.cache.findIndex((e) => e.id === id);
-    if (existingIdx >= 0) {
-      this.cache[existingIdx] = newEmergency;
-    } else {
-      this.cache.push(newEmergency);
-    }
-    this.notify();
 
     return newEmergency;
   }

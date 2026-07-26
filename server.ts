@@ -68,6 +68,7 @@ app.get("/api/emergencies", (req, res) => {
 
 app.post("/api/emergencies", (req, res) => {
   const {
+    id: customId,
     vehicleId,
     destinationName,
     destinationAddress,
@@ -75,15 +76,21 @@ app.post("/api/emergencies", (req, res) => {
     destinationLng,
     startLat,
     startLng,
+    currentLat,
+    currentLng,
     priority,
+    status,
     etaMinutes,
     distanceKm,
-    routeGeometry
+    routeGeometry,
+    createdAt,
+    createdTimestamp,
+    lastUpdated
   } = req.body;
 
-  const id = `EMG-${Math.floor(100 + Math.random() * 900)}`;
+  const id = customId || `EMG-${Math.floor(100 + Math.random() * 900)}`;
   const now = new Date();
-  const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  const timeStr = createdAt || now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
   const newEmergency: Emergency = {
     id,
@@ -94,15 +101,15 @@ app.post("/api/emergencies", (req, res) => {
     destinationLng: destinationLng || 77.5385,
     startLat: startLat || 12.8620,
     startLng: startLng || 77.5280,
-    currentLat: startLat || 12.8620,
-    currentLng: startLng || 77.5280,
+    currentLat: typeof currentLat === "number" ? currentLat : (startLat || 12.8620),
+    currentLng: typeof currentLng === "number" ? currentLng : (startLng || 77.5280),
     priority: priority || "critical",
-    status: "active",
-    etaMinutes: etaMinutes || 3,
-    distanceKm: distanceKm || 3.1,
+    status: status || "active",
+    etaMinutes: typeof etaMinutes === "number" ? etaMinutes : 3,
+    distanceKm: typeof distanceKm === "number" ? distanceKm : 3.1,
     createdAt: timeStr,
-    createdTimestamp: now.getTime(),
-    lastUpdated: now.toISOString(),
+    createdTimestamp: typeof createdTimestamp === "number" ? createdTimestamp : now.getTime(),
+    lastUpdated: lastUpdated || now.toISOString(),
     routeGeometry: routeGeometry || []
   };
 

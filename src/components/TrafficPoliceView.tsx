@@ -22,9 +22,17 @@ export const TrafficPoliceView: React.FC<TrafficPoliceViewProps> = ({
   const seenEmergenciesRef = useRef<Set<string>>(new Set());
   const isInitialLoadRef = useRef(true);
 
-  // Active non-completed and non-cleared emergencies with guaranteed field fallbacks
+  // Active non-completed emergencies created/updated within 12 hours with guaranteed field fallbacks
+  const TWELVE_HOURS_MS = 12 * 60 * 60 * 1000;
+  const now = Date.now();
+
   const activeList = emergencies
-    .filter((e) => e && e.status !== "completed" && e.status !== "cleared")
+    .filter((e) => {
+      if (!e || e.status === "completed") return false;
+      const updatedTimeMs = new Date(e.lastUpdated || e.createdAt || "").getTime();
+      if (!isNaN(updatedTimeMs) && now - updatedTimeMs > TWELVE_HOURS_MS) return false;
+      return true;
+    })
     .map((e) => {
       const vId = (e.vehicleId && e.vehicleId.trim()) || e.id || "AMBULANCE";
       const dName = (e.destinationName && e.destinationName.trim()) || "Hospital";

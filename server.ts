@@ -29,6 +29,18 @@ const PORT = 3000;
 
 // In-memory real-time store for active emergencies
 const emergencies: Record<string, Emergency> = {};
+const TWELVE_HOURS_MS = 12 * 60 * 60 * 1000;
+
+function cleanupExpiredEmergencies() {
+  const now = Date.now();
+  for (const id of Object.keys(emergencies)) {
+    const emg = emergencies[id];
+    const updatedTime = new Date(emg.lastUpdated || emg.createdAt || "").getTime();
+    if (!isNaN(updatedTime) && now - updatedTime > TWELVE_HOURS_MS) {
+      delete emergencies[id];
+    }
+  }
+}
 
 const sseClients: express.Response[] = [];
 
@@ -44,7 +56,16 @@ function broadcastUpdate(type: string, data: any) {
 }
 
 app.get("/api/emergencies", (req, res) => {
+  cleanupExpiredEmergencies();
   res.json(Object.values(emergencies));
+});
+
+app.delete("/api/emergencies/clear", (req, res) => {
+  for (const id of Object.keys(emergencies)) {
+    delete emergencies[id];
+  }
+  broadcastUpdate("EMERGENCY_CLEARED_ALL", { cleared: true });
+  res.json({ success: true });
 });
 
 app.post("/api/emergencies", (req, res) => {

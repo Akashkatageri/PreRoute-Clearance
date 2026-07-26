@@ -8,7 +8,7 @@ export interface UserSession {
   role: 'driver' | 'police';
   badgeNumber?: string;
   vehicleId?: string;
-  loginProvider: 'google' | 'native';
+  loginProvider: 'google' | 'native' | 'direct';
   loggedAt: string;
 }
 

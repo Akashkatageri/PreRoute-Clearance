@@ -74,10 +74,19 @@ export function Map({
       ? currentPos
       : defaultCenter;
 
-  // Other active emergencies excluding currently selected focused route
+  // Other active emergencies created/updated within 12 hours excluding currently selected focused route
+  const TWELVE_HOURS_MS = 12 * 60 * 60 * 1000;
   const otherActiveEmergencies = allEmergencies.filter(
-    (e) => e && e.status !== "completed" && e.id !== selectedEmergencyId
+    (e) => {
+      if (!e || e.status === "completed" || e.id === selectedEmergencyId) return false;
+      const updatedTimeMs = new Date(e.lastUpdated || e.createdAt || "").getTime();
+      if (!isNaN(updatedTimeMs) && Date.now() - updatedTimeMs > TWELVE_HOURS_MS) return false;
+      return true;
+    }
   );
+
+  const selectedEmergency = allEmergencies.find((e) => e && e.id === selectedEmergencyId);
+  const isSelectedAcknowledged = selectedEmergency?.status === "acknowledged" || selectedEmergency?.status === "cleared";
 
   const allGeometriesToFit = [
     ...(routeGeometry && routeGeometry.length > 0 ? [routeGeometry] : []),
@@ -137,7 +146,7 @@ export function Map({
                   />
                   <Polyline
                     positions={emg.routeGeometry}
-                    color="#f59e0b"
+                    color={emg.status === "acknowledged" || emg.status === "cleared" ? "#10b981" : "#f59e0b"}
                     weight={4}
                     opacity={0.9}
                     dashArray="6, 8"
@@ -158,8 +167,11 @@ export function Map({
               >
                 <Popup>
                   <div className="text-xs font-sans p-1">
-                    <p className="font-black text-amber-600 uppercase flex items-center gap-1">
-                      🚨 AMBULANCE {emg.vehicleId}
+                    <p className="font-black text-amber-600 uppercase flex items-center justify-between gap-2">
+                      <span>🚨 {emg.vehicleId}</span>
+                      {(emg.status === "acknowledged" || emg.status === "cleared") && (
+                        <span className="bg-emerald-500 text-slate-950 text-[9px] font-black px-1.5 py-0.5 rounded">✓ ACK</span>
+                      )}
                     </p>
                     <p className="text-slate-700 font-medium mt-0.5">To: {emg.destinationName}</p>
                     <p className="text-[11px] text-slate-500">ETA: {emg.etaMinutes} min • {emg.distanceKm} km</p>
@@ -218,7 +230,7 @@ export function Map({
           </Marker>
         )}
 
-        {/* Primary Emergency Corridor Red Line */}
+        {/* Primary Emergency Corridor Line */}
         {routeGeometry && routeGeometry.length > 0 && (
           <>
             <Polyline
@@ -229,7 +241,7 @@ export function Map({
             />
             <Polyline
               positions={routeGeometry}
-              color="#dc2626"
+              color={isSelectedAcknowledged ? "#10b981" : "#dc2626"}
               weight={6}
               opacity={0.95}
               lineCap="round"

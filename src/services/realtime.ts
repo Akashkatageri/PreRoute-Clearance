@@ -4,6 +4,8 @@ import { db } from "../lib/firebase";
 
 type Listener = (emergencies: Emergency[]) => void;
 
+const MODULE_LOAD_TIME = Date.now();
+
 class RealtimeSyncService {
   private listeners: Set<Listener> = new Set();
   private cache: Emergency[] = [];
@@ -19,16 +21,42 @@ class RealtimeSyncService {
 
       onSnapshot(emergenciesCol, (snapshot) => {
         const firestoreList: Emergency[] = [];
+        const TWELVE_HOURS_MS = 12 * 60 * 60 * 1000;
+        const now = Date.now();
+
         snapshot.forEach((docSnap) => {
           const raw = docSnap.data() as Partial<Emergency>;
           const docId = raw.id || docSnap.id;
 
           if (docId) {
+            const lastUpdatedIso = raw.lastUpdated || new Date().toISOString();
+            const updatedTimeMs = new Date(lastUpdatedIso).getTime();
+
+            // Clear previously existing emergencies created/updated prior to this session
+            if (!isNaN(updatedTimeMs) && updatedTimeMs < MODULE_LOAD_TIME - 1000) {
+              try {
+                deleteDoc(doc(db, "emergencies", docId)).catch(() => {});
+              } catch (e) {
+                console.warn("Could not purge previous emergency:", e);
+              }
+              return;
+            }
+
+            // Auto-expire emergencies older than 12 hours
+            if (!isNaN(updatedTimeMs) && now - updatedTimeMs > TWELVE_HOURS_MS) {
+              try {
+                deleteDoc(doc(db, "emergencies", docId)).catch(() => {});
+              } catch (e) {
+                console.warn("Could not delete expired emergency:", e);
+              }
+              return;
+            }
+
             const emergencyItem: Emergency = {
               id: docId,
               vehicleId: (raw.vehicleId && raw.vehicleId.trim()) || docId || "AMBULANCE",
               destinationName: (raw.destinationName && raw.destinationName.trim()) || "Hospital",
-              destinationAddress: (raw.destinationAddress && raw.destinationAddress.trim()) || raw.destinationName || "General Hospital",
+              destinationAddress: (raw.destinationAddress && raw.destinationAddress.trim()) || raw.destinationName || "Hospital Address",
               destinationLat: typeof raw.destinationLat === "number" ? raw.destinationLat : 12.8715,
               destinationLng: typeof raw.destinationLng === "number" ? raw.destinationLng : 77.5385,
               startLat: typeof raw.startLat === "number" ? raw.startLat : 12.8620,
@@ -40,7 +68,7 @@ class RealtimeSyncService {
               etaMinutes: typeof raw.etaMinutes === "number" && !isNaN(raw.etaMinutes) && raw.etaMinutes >= 0 ? raw.etaMinutes : 3,
               distanceKm: typeof raw.distanceKm === "number" && !isNaN(raw.distanceKm) && raw.distanceKm >= 0 ? raw.distanceKm : 2.5,
               createdAt: (raw.createdAt && raw.createdAt.trim()) || "Just now",
-              lastUpdated: raw.lastUpdated || new Date().toISOString(),
+              lastUpdated: lastUpdatedIso,
               routeGeometry: raw.routeGeometry || []
             };
 
@@ -86,7 +114,7 @@ class RealtimeSyncService {
     const newEmergency: Emergency = {
       id,
       vehicleId: emergencyData.vehicleId || "AMBULANCE-108",
-      destinationName: emergencyData.destinationName || "General Hospital",
+      destinationName: emergencyData.destinationName || "Hospital",
       destinationAddress: emergencyData.destinationAddress || "Hospital Address",
       destinationLat: emergencyData.destinationLat || 12.8715,
       destinationLng: emergencyData.destinationLng || 77.5385,
@@ -226,6 +254,26 @@ class RealtimeSyncService {
       }).catch((e) => console.warn("API deleteEmergency error:", e));
     } catch (e) {
       console.warn("API deleteEmergency exception:", e);
+    }
+  }
+
+  public async clearAllEmergencies(): Promise<void> {
+    const ids = this.cache.map((e) => e.id);
+    this.cache = [];
+    this.notify();
+
+    for (const id of ids) {
+      try {
+        await deleteDoc(doc(db, "emergencies", id));
+      } catch (e) {
+        console.warn("Firestore clear delete error:", e);
+      }
+    }
+
+    try {
+      await fetch("/api/emergencies/clear", { method: "DELETE" });
+    } catch (e) {
+      console.warn("API clear error:", e);
     }
   }
 }
